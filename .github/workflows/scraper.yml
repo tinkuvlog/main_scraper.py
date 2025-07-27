@@ -1,55 +1,30 @@
-# .github/workflows/scraper.yml
-
-# This is the name of the automated workflow, which you'll see in the "Actions" tab of your GitHub repository.
 name: Run Job Scraper
 
-# This section controls WHEN the script will run.
 on:
-  # This sets a schedule. The 'cron' syntax '0 0,12 * * *' means it will run at 00:00 and 12:00 UTC every day.
-  # This is equivalent to 5:30 AM and 5:30 PM in Indian Standard Time (IST).
+  workflow_dispatch: # Allows manual running
   schedule:
-    - cron: '0 0,12 * * *'
-  
-  # This line allows you to also run the workflow manually from the GitHub Actions tab.
-  # This is very useful for testing.
-  workflow_dispatch:
+    - cron: '0 0,12 * * *' # Runs at midnight and noon UTC
 
-# This section defines the actual tasks (jobs) that the workflow will perform.
 jobs:
-  # We are defining a single job named 'build'.
   build:
-    # This specifies that the job will run on a fresh, virtual machine provided by GitHub, using the latest version of Ubuntu Linux.
     runs-on: ubuntu-latest
 
-    # These are the individual steps the virtual machine will execute in order.
     steps:
-      # Step 1: Check out your repository's code.
-      # This downloads your 'main_scraper.py' file into the virtual machine so it can be used.
-      - name: Check out repository code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up the Python programming language environment.
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      # Step 3: Install the necessary Python libraries.
-      # Your script needs 'requests' to download web pages, 'beautifulsoup4' to read them, and 'firebase-admin' to talk to your database.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 firebase-admin
+          pip install firebase-admin requests beautifulsoup4
 
-      # Step 4: Create the Firebase credentials file from the GitHub Secret.
-      # This is the most important security step. It safely takes the JSON key you saved in GitHub Secrets 
-      # and creates the 'serviceAccountKey.json' file for the script to use, without ever exposing the key in your code.
-      - name: Create Firebase Service Account Key
-        env:
-          FIREBASE_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY_JSON }}
-        run: echo "$FIREBASE_KEY" > serviceAccountKey.json
-
-      # Step 5: Run the main scraper script.
-      # This is the final step where it executes your Python file to find and post new jobs.
       - name: Run Scraper
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY_JSON }}
+          FIREBASE_PROJECT_ID: my-job-porta
         run: python main_scraper.py
