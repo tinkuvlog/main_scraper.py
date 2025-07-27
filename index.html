@@ -177,6 +177,8 @@
                     allData[type] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 }
                 renderContent('jobs'); 
+                renderContent('results');
+                renderContent('admitCards');
             } catch (error) {
                 console.error("Error fetching data:", error);
             }
@@ -190,7 +192,14 @@
             let dataToRender = allData[type];
             if (type === 'jobs') {
                 const today = new Date();
-                dataToRender = allData.jobs.filter(job => new Date(job.lastDate) >= today);
+                today.setHours(0, 0, 0, 0); 
+                dataToRender = allData.jobs.filter(job => {
+                    const postDate = new Date(job.postedDate);
+                    const lastDate = new Date(job.lastDate);
+                    postDate.setHours(0,0,0,0);
+                    lastDate.setHours(0,0,0,0);
+                    return postDate <= today && lastDate >= today;
+                });
             }
             
             const totalPages = Math.ceil(dataToRender.length / itemsPerPage);
@@ -251,16 +260,12 @@
             const lastDate = new Date(job.lastDate);
             const formattedDate = lastDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
             return `
-                <div class="content-card bg-white p-6 rounded-lg flex flex-col">
-                    <h4 class="text-lg font-bold text-gray-900">${sanitizeText(job.title)}</h4>
-                    <p class="text-sm text-gray-500 mb-4">${sanitizeText(job.organization)}</p>
-                    <div class="space-y-3 text-gray-700 text-sm flex-grow">
-                        <div class="flex items-center"><i class="fas fa-briefcase w-5 text-center mr-2 text-indigo-500"></i><span><strong>Vacancies:</strong> ${sanitizeText(job.vacancies)}</span></div>
-                        <div class="flex items-center"><i class="fas fa-graduation-cap w-5 text-center mr-2 text-indigo-500"></i><span><strong>Qualification:</strong> ${sanitizeText(job.education)}</span></div>
-                        <div class="flex items-center font-semibold text-gray-700"><i class="fas fa-calendar-alt w-5 text-center mr-2 text-red-500"></i><span><strong>Last Date:</strong> ${formattedDate}</span></div>
-                    </div>
-                    <div class="mt-6 pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2">
-                        <a href="${job.applicationUrl}" target="_blank" class="flex-1 text-center bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors text-sm">Apply Online</a>
+                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
+                    <h4 class="text-base font-bold text-gray-900">${sanitizeText(job.title)}</h4>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(job.organization)}</p>
+                    <p class="text-xs text-gray-600 mb-4 flex-grow">${sanitizeText(job.description || '')}</p>
+                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Last Date:</strong> ${formattedDate}</div>
+                    <div class="mt-auto pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2">
                         <button data-jobid="${job.id}" class="details-btn flex-1 bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors text-sm">View Details</button>
                     </div>
                 </div>`;
@@ -270,10 +275,10 @@
             const date = new Date(item.postedDate);
             const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
             return `
-                <div class="content-card bg-white p-6 rounded-lg flex flex-col">
-                    <h4 class="text-lg font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
-                    <p class="text-sm text-gray-500 mt-2 mb-4">${sanitizeText(item.organization)}</p>
-                    <div class="text-sm text-gray-600 mb-4"><strong>Result Date:</strong> ${formattedDate}</div>
+                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
+                    <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
+                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Result Date:</strong> ${formattedDate}</div>
                     <a href="${item.url}" target="_blank" class="block w-full text-center bg-green-500 text-white font-semibold py-2 rounded-lg hover:bg-green-600 transition-colors text-sm mt-auto">Download Result</a>
                 </div>`;
         }
@@ -282,14 +287,14 @@
             const date = new Date(item.lastDate); // Using lastDate for Exam Date
             const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
             return `
-                <div class="content-card bg-white p-6 rounded-lg flex flex-col">
-                    <h4 class="text-lg font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
-                    <p class="text-sm text-gray-500 mt-2 mb-4">${sanitizeText(item.organization)}</p>
-                    <div class="text-sm text-gray-600 mb-4"><strong>Exam Date:</strong> ${formattedDate}</div>
+                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
+                    <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
+                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Exam Date:</strong> ${formattedDate}</div>
                     <a href="${item.url}" target="_blank" class="block w-full text-center bg-red-500 text-white font-semibold py-2 rounded-lg hover:bg-red-600 transition-colors text-sm mt-auto">Download Admit Card</a>
                 </div>`;
         }
-
+        
         async function callGeminiAPI(prompt) {
             const apiKey = ""; // Leave empty
             const model = 'gemini-2.0-flash';
@@ -352,15 +357,15 @@
 
         // --- Event Listeners ---
         document.body.addEventListener('click', (e) => {
-            const detailsButton = e.target.closest('.details-btn');
-            if(detailsButton) {
-                handleDetailsClick(detailsButton.dataset.jobid);
-            }
             const paginationButton = e.target.closest('.pagination-btn');
             if(paginationButton) {
                 const type = paginationButton.dataset.type;
                 currentPage[type] = parseInt(paginationButton.dataset.page);
                 renderContent(type);
+            }
+             const detailsButton = e.target.closest('.details-btn');
+            if(detailsButton) {
+                handleDetailsClick(detailsButton.dataset.jobid);
             }
         });
         
