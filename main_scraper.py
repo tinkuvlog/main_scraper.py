@@ -28,8 +28,8 @@ def initialize_firebase():
         print(f"An error occurred during Firebase initialization: {e}")
         return None
 
-def call_gemini_api(prompt):
-    """Calls the Gemini API to process the notification text."""
+def call_gemini_api_for_job_details(prompt, job_title):
+    """Calls Gemini API to extract structured data for a job posting."""
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         print("ERROR: GEMINI_API_KEY not found in environment variables.")
@@ -56,21 +56,14 @@ def call_gemini_api(prompt):
             text = text.strip().replace('```json', '').replace('```', '').strip()
         
         return json.loads(text)
-    except requests.exceptions.RequestException as e:
-        print(f"Error calling Gemini API: {e}")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from Gemini API response: {e}")
-        print(f"Raw response text: {text}")
     except Exception as e:
-        print(f"An unexpected error occurred in call_gemini_api: {e}")
+        print(f"An error occurred in call_gemini_api_for_job_details: {e}")
     return None
 
-
-def scrape_website(db, app_id):
-    """Scrapes the job listing website, processes new jobs, and adds them to Firestore."""
-    URL = "https://www.sarkariresult.com.im/latestjob/"
-    
-    print(f"Scraping {URL} for new jobs...")
+def scrape_section(db, app_id, section_id, collection_name):
+    """Scrapes a specific section (Latest Jobs, Results, Admit Cards) from the website."""
+    URL = f"https://www.sarkariresult.com.im/{section_id}/"
+    print(f"Scraping {URL} for new {collection_name}...")
     
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
@@ -79,101 +72,84 @@ def scrape_website(db, app_id):
         
         soup = BeautifulSoup(page.content, "html.parser")
         
-        all_lists = soup.find_all('ul')
-        job_links = []
-
-        for lst in all_lists:
-            links = lst.find_all('a')
-            for link in links:
-                href = link.get('href')
-                text = link.text.strip()
-                if href and (re.search(r'\d{4}', text) or "recruitment" in text.lower() or "online form" in text.lower()):
-                     job_links.append(link)
-
-        if not job_links:
-            print("Could not find any potential job links. The website structure may have changed significantly.")
+        post_content = soup.find(id="post")
+        if not post_content:
+            print(f"Could not find content for section '{section_id}'.")
             return
 
-        print(f"Found {len(job_links)} potential job links.")
+        links = post_content.find_all('a')
+        print(f"Found {len(links)} potential links in {collection_name} section.")
 
-        for link in job_links:
-            job_title = link.text.strip()
-            job_url = link.get("href")
+        for link in links:
+            title = link.text.strip()
+            url = link.get("href")
 
-            if not job_title or not job_url:
+            if not title or not url:
                 continue
 
-            jobs_ref = db.collection(f"artifacts/{app_id}/public/data/jobs")
-            existing_job_query = jobs_ref.where("title", "==", job_title).limit(1).get()
+            items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
+            existing_item_query = items_ref.where("title", "==", title).limit(1).get()
             
-            if len(existing_job_query) > 0:
-                print(f"Job '{job_title}' already exists. Skipping.")
+            if len(existing_item_query) > 0:
+                print(f"{collection_name[:-1].capitalize()} '{title}' already exists. Skipping.")
                 continue
 
-            print(f"Processing new job: {job_title}")
+            print(f"Processing new {collection_name[:-1]}: {title}")
+
+            item_data = {
+                "title": title,
+                "url": url,
+                "postedDate": datetime.now().strftime("%Y-%m-%d")
+            }
             
-            try:
-                job_page = requests.get(job_url, headers=headers, timeout=30)
-                job_page.raise_for_status()
-                job_soup = BeautifulSoup(job_page.content, "html.parser")
-                
-                content_div = job_soup.find("div", id="post")
-                if content_div:
-                    notification_text = content_div.get_text(separator="\n", strip=True)
-                else:
-                    notification_text = job_soup.get_text(separator="\n", strip=True)
-                    print("Could not find content div on job page, using all page text as a fallback.")
+            # If it's a job, we need to get more details
+            if collection_name == 'jobs':
+                try:
+                    job_page = requests.get(url, headers=headers, timeout=30)
+                    job_page.raise_for_status()
+                    job_soup = BeautifulSoup(job_page.content, "html.parser")
+                    content_div = job_soup.find("div", id="post")
+                    notification_text = content_div.get_text(separator="\n", strip=True) if content_div else ""
 
-                
-                prompt = f"""
-                You are an expert government job notification analyst. Analyze the following text and extract the key information.
-                Provide the output ONLY as a valid JSON object. Do not include any text before or after the JSON.
+                    prompt = f"""
+                    Analyze the following job notification text and extract the details as a JSON object.
+                    - "title": Use the title: "{title}".
+                    - "organization": The name of the recruiting body.
+                    - "vacancies": The total number of posts.
+                    - "postedDate": The application start date in "YYYY-MM-DD" format.
+                    - "lastDate": The last date to apply in "YYYY-MM-DD" format.
+                    - "education": A concise summary of the qualification.
+                    - "notificationText": A detailed summary.
 
-                The JSON object must have these exact keys:
-                - "title": The official name of the recruitment or exam. Use the title: "{job_title}".
-                - "organization": The name of the recruiting body (e.g., Staff Selection Commission).
-                - "vacancies": The total number of posts as a string (e.g., "17,727", "Not Specified").
-                - "postedDate": The application start date, in "YYYY-MM-DD" format.
-                - "lastDate": The last date to apply, in "YYYY-MM-DD" format.
-                - "education": A concise summary of the required qualification (e.g., "10+2 Intermediate", "Bachelor's Degree").
-                - "notificationText": A detailed summary including age limits, application fees for different categories, the full selection process, and a syllabus outline.
-
-                Here is the text to analyze:
-                ---
-                {notification_text}
-                ---
-                """
-
-                job_data = call_gemini_api(prompt)
-
-                if job_data:
-                    job_data["applicationUrl"] = job_url
-                    job_data["notificationPdfUrl"] = job_url
+                    Text: --- {notification_text} ---
+                    """
                     
-                    jobs_ref.add(job_data)
-                    print(f"Successfully added job: {job_data['title']}")
-                else:
-                    print(f"Failed to process job data for: {job_title}")
+                    structured_data = call_gemini_api_for_job_details(prompt, title)
+                    if structured_data:
+                        item_data.update(structured_data)
+                        item_data["applicationUrl"] = url
+                        item_data["notificationPdfUrl"] = url
+                except Exception as e:
+                    print(f"Could not process details for job '{title}': {e}")
+                    continue # Skip adding the job if details can't be processed
 
-            except requests.exceptions.RequestException as e:
-                print(f"Could not fetch job page for '{job_title}': {e}")
-            
-            time.sleep(2) 
+            items_ref.add(item_data)
+            print(f"Successfully added {collection_name[:-1]}: {title}")
+            time.sleep(2)
 
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred while scraping the website: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred in scrape_website: {e}")
+        print(f"An error occurred while scraping section {section_id}: {e}")
 
 def main():
     """Main function to run the scraper."""
     db = initialize_firebase()
     if db:
         app_id = os.environ.get('FIREBASE_PROJECT_ID', 'my-job-porta')
-        scrape_website(db, app_id)
+        scrape_section(db, app_id, "latestjob", "jobs")
+        scrape_section(db, app_id, "result", "results")
+        scrape_section(db, app_id, "admit-card", "admitCards")
     else:
         print("Could not connect to Firebase. Exiting.")
 
 if __name__ == "__main__":
     main()
-
