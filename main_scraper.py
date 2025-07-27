@@ -62,10 +62,8 @@ def call_gemini_api(prompt):
 
 def get_base_title(title):
     """Creates a simplified, unique identifier for a job title to prevent duplicates."""
-    # Remove common extra words and standardize the title
     title = title.lower()
     title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4}|posts|post|\[|\]', '', title)
-    # Remove extra spaces
     title = ' '.join(title.split())
     return title
 
@@ -83,11 +81,19 @@ def scrape_section(db, app_id, section_id, collection_name):
         
         all_lists = soup.find_all('ul')
         item_links = []
+        
+        # Keywords to identify valid posts and ignore navigation links
+        valid_keywords = ['recruitment', 'online', 'result', 'admit card', 'answer key', 'marks', 'admission', 'counseling']
+        ignore_keywords = ['home', 'jobs', 'yojana', 'contact us', 'privacy policy']
 
         for lst in all_lists:
             links = lst.find_all('a')
             for link in links:
-                item_links.append(link)
+                href = link.get('href')
+                text = link.text.strip().lower()
+                
+                if href and any(keyword in text for keyword in valid_keywords) and not any(keyword in text for keyword in ignore_keywords):
+                     item_links.append(link)
 
         if not item_links:
             print(f"Could not find any potential links in section '{section_id}'.")
@@ -102,10 +108,8 @@ def scrape_section(db, app_id, section_id, collection_name):
             if not title or not url:
                 continue
 
-            # Advanced duplicate check
             base_title = get_base_title(title)
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
-            # We will check based on the simplified base title to avoid duplicates
             existing_item_query = items_ref.where("baseTitle", "==", base_title).limit(1).get()
             
             if len(existing_item_query) > 0:
@@ -133,7 +137,7 @@ def scrape_section(db, app_id, section_id, collection_name):
 
                 if structured_data:
                     structured_data["url"] = url
-                    structured_data["baseTitle"] = base_title # Add the base title for duplicate checking
+                    structured_data["baseTitle"] = base_title
                     if collection_name == 'jobs':
                         structured_data["applicationUrl"] = url
                         structured_data["notificationPdfUrl"] = url
@@ -146,7 +150,7 @@ def scrape_section(db, app_id, section_id, collection_name):
             except Exception as e:
                 print(f"Could not process details for '{title}': {e}")
             
-            time.sleep(2) 
+            time.sleep(5) 
 
     except Exception as e:
         print(f"An error occurred while scraping section {section_id}: {e}")
