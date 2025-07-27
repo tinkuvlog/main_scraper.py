@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import json
 import time
 from datetime import datetime
+import re
 
 def initialize_firebase():
     """Initializes Firebase Admin SDK using credentials from environment variables."""
@@ -74,12 +75,27 @@ def scrape_website(db, app_id):
         
         soup = BeautifulSoup(page.content, "html.parser")
         
-        # ** IMPROVED SCRAPING LOGIC **
-        # This selector is more specific and robust. It looks for list items within the main post content.
-        job_links = soup.select("#post ul li a") 
+        # ** MORE ROBUST SCRAPING LOGIC **
+        # Find the main content div first
+        post_content = soup.find(id="post")
+        if not post_content:
+            print("Could not find the main content div with id='post'. Website structure may have changed.")
+            return
+
+        # Find all links within that div
+        all_links = post_content.find_all('a')
+        job_links = []
+
+        # Filter links based on common patterns for job posts
+        for link in all_links:
+            href = link.get('href')
+            text = link.text.strip()
+            # A simple heuristic: if the link text contains a year or common keywords, it's likely a job post.
+            if href and (re.search(r'\d{4}', text) or "recruitment" in text.lower() or "online form" in text.lower()):
+                 job_links.append(link)
 
         if not job_links:
-            print("Could not find any job links using the specified selector. The website structure may have changed.")
+            print("Could not find any potential job links within the content div. The website structure may have changed.")
             return
 
         print(f"Found {len(job_links)} potential job links.")
