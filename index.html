@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sarkari Naukri Finder - Latest Govt. Job Openings</title>
+    <title>Sarkari Naukri Finder - Latest Jobs, Results & Admit Cards</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
         }
-        .job-card {
+        .job-card, .result-card {
             transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
         }
-        .job-card:hover {
+        .job-card:hover, .result-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
         }
@@ -24,14 +25,8 @@
         @keyframes pulse {
             50% { opacity: .5; }
         }
-        /* Modal styles */
-        .modal-backdrop {
-            transition: opacity 0.3s ease;
-        }
-        .modal-content {
-            transition: transform 0.3s ease;
-        }
-        /* Simple spinner for buttons */
+        .modal-backdrop { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease; }
         .btn-spinner {
             border: 2px solid #f3f3f3;
             border-top: 2px solid #3498db;
@@ -44,48 +39,17 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        /* Enhanced Modal Body Formatting */
-        #modalBody h3 {
-            font-size: 1.25rem; /* text-xl */
-            font-weight: 700; /* font-bold */
-            color: #1f2937; /* text-gray-800 */
-            margin-top: 1.25rem; /* mt-5 */
-            margin-bottom: 0.75rem; /* mb-3 */
-            padding-bottom: 0.5rem; /* pb-2 */
-            border-bottom: 2px solid #e5e7eb; /* border-b-2 border-gray-200 */
+        .tab-btn {
+            transition: all 0.2s ease-in-out;
         }
-         #modalBody ul {
-            list-style-type: none;
-            padding-left: 0;
-            margin-top: 0.5rem;
-        }
-        #modalBody li {
-            position: relative;
-            padding-left: 1.5rem; /* pl-6 */
-            margin-bottom: 0.5rem; /* mb-2 */
-        }
-        #modalBody li::before {
-            content: '✓';
-            position: absolute;
-            left: 0;
-            color: #4f46e5; /* text-indigo-600 */
-            font-weight: 700;
-        }
-        #modalBody strong {
-            color: #374151; /* text-gray-700 */
-        }
-        /* Quiz Styles */
-        .quiz-option.correct {
-            background-color: #dcfce7; /* green-100 */
-            border-color: #22c55e; /* green-500 */
-        }
-        .quiz-option.incorrect {
-            background-color: #fee2e2; /* red-100 */
-            border-color: #ef4444; /* red-500 */
+        .tab-btn.active {
+            border-color: #4f46e5; /* indigo-600 */
+            color: #4f46e5;
+            background-color: #eef2ff;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-100 text-gray-800">
 
     <!-- Header -->
     <header class="bg-white shadow-md sticky top-0 z-20">
@@ -94,13 +58,6 @@
                 <i class="fas fa-briefcase text-2xl text-indigo-600"></i>
                 <h1 class="text-xl md:text-2xl font-bold text-gray-900">Sarkari Naukri Finder</h1>
             </div>
-            <div class="hidden md:flex items-center space-x-4">
-                <a href="#latest-jobs" class="text-gray-600 hover:text-indigo-600">Latest Jobs</a>
-                <a href="#ai-tools" class="text-gray-600 hover:text-indigo-600">AI Tools</a>
-            </div>
-            <button class="md:hidden text-gray-600 hover:text-indigo-600">
-                <i class="fas fa-bars text-2xl"></i>
-            </button>
         </nav>
     </header>
 
@@ -110,10 +67,10 @@
         <!-- Hero Section -->
         <section class="text-center mb-12">
             <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">Find Your Dream Government Job</h2>
-            <p class="text-lg text-gray-600 max-w-3xl mx-auto">Your one-stop portal for active job notifications, powered by AI.</p>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto">Your one-stop portal for the latest jobs, results, and admit cards.</p>
             <div class="mt-8 max-w-xl mx-auto">
                 <div class="relative">
-                    <input type="search" id="searchInput" placeholder="Search for jobs (e.g., SSC, UPSC, Clerk...)" class="w-full p-4 pr-12 text-gray-900 border border-gray-300 rounded-full bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                    <input type="search" id="searchInput" placeholder="Search across all sections..." class="w-full p-4 pr-12 text-gray-900 border border-gray-300 rounded-full bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
                     <button class="absolute inset-y-0 right-0 flex items-center pr-4">
                         <i class="fas fa-search text-gray-400"></i>
                     </button>
@@ -121,11 +78,50 @@
             </div>
         </section>
 
+        <!-- Main Content Area with Tabs -->
+        <div class="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-gray-200">
+            <!-- Tab Navigation -->
+            <div class="border-b border-gray-200 mb-6">
+                <nav class="-mb-px flex flex-wrap gap-4" aria-label="Tabs">
+                    <button data-tab="jobs" class="tab-btn active whitespace-nowrap py-3 px-4 border-b-2 font-semibold text-sm">
+                        <i class="fas fa-briefcase mr-2"></i>Latest Jobs
+                    </button>
+                    <button data-tab="results" class="tab-btn whitespace-nowrap py-3 px-4 border-b-2 border-transparent font-semibold text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-poll mr-2"></i>Results
+                    </button>
+                    <button data-tab="admitCards" class="tab-btn whitespace-nowrap py-3 px-4 border-b-2 border-transparent font-semibold text-sm text-gray-500 hover:text-indigo-600">
+                        <i class="fas fa-id-card mr-2"></i>Admit Cards
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Tab Content -->
+            <div>
+                <!-- Jobs Content -->
+                <div id="jobs-content" class="tab-content">
+                    <div id="jobs-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+                    <div id="jobs-skeleton-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+                    <div id="jobs-load-more-container" class="text-center mt-8"></div>
+                </div>
+                <!-- Results Content -->
+                <div id="results-content" class="tab-content hidden">
+                    <div id="results-container" class="space-y-4"></div>
+                    <div id="results-skeleton-container" class="space-y-4"></div>
+                    <div id="results-load-more-container" class="text-center mt-8"></div>
+                </div>
+                <!-- Admit Cards Content -->
+                <div id="admitCards-content" class="tab-content hidden">
+                    <div id="admit-cards-container" class="space-y-4"></div>
+                    <div id="admit-cards-skeleton-container" class="space-y-4"></div>
+                    <div id="admit-cards-load-more-container" class="text-center mt-8"></div>
+                </div>
+            </div>
+        </div>
+        
         <!-- AI Sections Grid -->
-        <section id="ai-tools" class="mb-12">
+        <section id="ai-tools" class="mt-12">
              <h3 class="text-2xl font-bold text-gray-900 mb-6 flex items-center"><i class="fas fa-robot mr-3 text-indigo-500"></i>AI Preparation Tools</h3>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <!-- AI Career Advisor -->
                 <div id="career-advisor" class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
                     <h3 class="text-xl font-bold text-gray-900 mb-2 flex items-center"><i class="fas fa-user-graduate mr-3 text-indigo-500"></i>AI Career Advisor</h3>
                     <p class="text-gray-600 mb-4">Enter your qualifications to get personalized job suggestions from our AI.</p>
@@ -138,8 +134,6 @@
                     </div>
                     <div id="adviceResult" class="mt-4 p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-gray-700 hidden"></div>
                 </div>
-
-                <!-- Current Affairs Hub -->
                 <div id="quiz-hub" class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
                     <h3 class="text-xl font-bold text-gray-900 mb-2 flex items-center"><i class="fas fa-book-open mr-3 text-purple-500"></i>Current Affairs Hub</h3>
                     <p class="text-gray-600 mb-4">Test your knowledge with a fresh quiz on recent events, generated by AI.</p>
@@ -149,23 +143,6 @@
                     </button>
                     <div id="quiz-container" class="mt-4 text-gray-700 hidden"></div>
                 </div>
-            </div>
-        </section>
-
-        <!-- Job Listings -->
-        <section id="latest-jobs">
-            <h3 class="text-2xl font-bold text-gray-900 mb-6 flex items-center"><i class="fas fa-bell mr-3 text-indigo-500"></i>Latest Job Listings</h3>
-            <div id="job-listings-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
-            <div id="skeleton-loader-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
-             <!-- Pagination Controls -->
-            <div id="pagination-controls" class="mt-12 flex justify-center items-center gap-4">
-                <button id="prev-page-btn" class="bg-gray-300 text-gray-800 font-semibold px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="fas fa-arrow-left mr-2"></i> Previous
-                </button>
-                <span id="page-indicator" class="text-gray-700 font-semibold"></span>
-                <button id="next-page-btn" class="bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    Next <i class="fas fa-arrow-right ml-2"></i>
-                </button>
             </div>
         </section>
     </main>
@@ -185,24 +162,17 @@
                 <h4 id="aiModalTitle" class="text-xl font-bold text-gray-800"></h4>
                 <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
             </div>
-            <div id="modalBody" class="p-6 overflow-y-auto">
-                <!-- Content will be injected here -->
-            </div>
-            <div id="modalFooter" class="p-4 bg-gray-50 border-t">
-                 <!-- Links will be injected here -->
-            </div>
+            <div id="modalBody" class="p-6 overflow-y-auto"></div>
+            <div id="modalFooter" class="p-4 bg-gray-50 border-t"></div>
         </div>
     </div>
 
     <script type="module">
-        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy, limit, getDocs, startAfter } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- DOM Elements ---
-        const jobListingsContainer = document.getElementById('job-listings-container');
-        const skeletonLoaderContainer = document.getElementById('skeleton-loader-container');
         const searchInput = document.getElementById('searchInput');
         const aiModal = document.getElementById('aiModal');
         const closeModalBtn = document.getElementById('closeModalBtn');
@@ -218,25 +188,19 @@
         const quizBtnText = document.getElementById('quizBtnText');
         const quizBtnSpinner = document.getElementById('quizBtnSpinner');
         const quizContainer = document.getElementById('quiz-container');
-
-        const prevPageBtn = document.getElementById('prev-page-btn');
-        const nextPageBtn = document.getElementById('next-page-btn');
-        const pageIndicator = document.getElementById('page-indicator');
+        const tabButtons = document.querySelectorAll('.tab-btn');
 
         // --- App State ---
-        let db, auth;
-        let allJobs = []; // This will be populated from Firestore
-        let currentPage = 1;
-        const jobsPerPage = 16;
-        let currentFilteredJobs = [];
-        let appId = 'sarkari-job-finder'; // Default App ID
-        let quizData = []; // To store the current quiz questions and answers
-        let hasCheckedInitialData = false; // Flag to prevent duplicate data addition
+        let db;
+        let allData = { jobs: [], results: [], admitCards: [] };
+        let lastVisible = { jobs: null, results: null, admitCards: null };
+        const itemsPerPage = 12;
+        let appId = 'my-job-porta';
+        let quizData = []; 
 
         // --- Firebase and App Initialization ---
         async function setupApp() {
             try {
-                // For Firebase JS SDK v7.20.0 and later, measurementId is optional
                 const firebaseConfig = {
                     apiKey: "AIzaSyBmJN7DL7d8G1ByqPKdzIBpNZxSp4-0VrI",
                     authDomain: "my-job-porta.firebaseapp.com",
@@ -246,78 +210,112 @@
                     appId: "1:246539623451:web:483fd691916b7ba6a7ecbe",
                     measurementId: "G-9S4CR1KR5Q"
                 };
-
-                appId = firebaseConfig.projectId || 'sarkari-job-finder';
-
+                appId = firebaseConfig.projectId;
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
-                auth = getAuth(app);
-
+                const auth = getAuth(app);
                 await signInAnonymously(auth);
-
                 onAuthStateChanged(auth, user => {
                     if (user) {
-                        console.log("User signed in:", user.uid);
-                        setupRealtimeListener();
+                        loadInitialData();
                     }
                 });
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                jobListingsContainer.innerHTML = `<p class="text-red-500 col-span-full">Error: Could not connect to the database. Please ensure your Firebase config is correct.</p>`;
-                skeletonLoaderContainer.style.display = 'none';
+                document.getElementById('jobs-container').innerHTML = `<p class="text-red-500 col-span-full">Error: Could not connect to the database.</p>`;
             }
-        }
-
-        // --- Firestore Realtime Listener ---
-        function setupRealtimeListener() {
-            const jobsCollection = collection(db, `artifacts/${appId}/public/data/jobs`);
-            onSnapshot(jobsCollection, (snapshot) => {
-                const jobsFromDb = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                allJobs = jobsFromDb;
-                
-                if (!hasCheckedInitialData && allJobs.length === 0) {
-                    hasCheckedInitialData = true; 
-                    addInitialDataIfNeeded();
-                } else {
-                    displayJobs();
-                }
-
-            }, (error) => {
-                console.error("Error fetching jobs:", error);
-                jobListingsContainer.innerHTML = `<p class="text-red-500 col-span-full">Error loading job listings.</p>`;
-            });
         }
         
-        // --- UI Rendering ---
-        function createSkeletonCards() {
-            let skeletons = '';
-            for (let i = 0; i < 16; i++) {
-                skeletons += `
-                    <div class="skeleton-loader bg-white p-6 rounded-lg shadow-md border border-gray-200">
-                        <div class="h-6 bg-gray-200 rounded w-3/4 mb-4"></div><div class="h-4 bg-gray-200 rounded w-1/2 mb-6"></div>
-                        <div class="space-y-3"><div class="h-4 bg-gray-200 rounded w-full"></div><div class="h-4 bg-gray-200 rounded w-5/6"></div></div>
-                        <div class="mt-6 flex justify-between items-center"><div class="h-10 bg-gray-200 rounded w-24"></div><div class="h-10 bg-gray-200 rounded w-24"></div></div>
-                    </div>`;
+        // --- Data Loading and Rendering ---
+        async function loadInitialData() {
+            showSkeletons();
+            await Promise.all([
+                fetchAndRenderData('jobs'),
+                fetchAndRenderData('results'),
+                fetchAndRenderData('admitCards')
+            ]);
+            hideSkeletons();
+        }
+
+        async function fetchAndRenderData(type, loadMore = false) {
+            const container = document.getElementById(`${type}-container`);
+            const loadMoreContainer = document.getElementById(`${type}-load-more-container`);
+            
+            if (!container || !loadMoreContainer) return;
+            
+            if (!loadMore) {
+                container.innerHTML = '';
+                allData[type] = [];
+                lastVisible[type] = null;
             }
-            skeletonLoaderContainer.innerHTML = skeletons;
+
+            let q = query(
+                collection(db, `artifacts/${appId}/public/data/${type}`), 
+                orderBy("postedDate", "desc"), 
+                limit(itemsPerPage)
+            );
+
+            if (loadMore && lastVisible[type]) {
+                q = query(q, startAfter(lastVisible[type]));
+            }
+
+            try {
+                const documentSnapshots = await getDocs(q);
+                
+                if (documentSnapshots.empty && !loadMore) {
+                    container.innerHTML = `<p class="text-gray-500 p-4">No new ${type} found.</p>`;
+                }
+                
+                lastVisible[type] = documentSnapshots.docs[documentSnapshots.docs.length - 1];
+
+                let itemsHtml = '';
+                documentSnapshots.forEach((doc) => {
+                    const data = { id: doc.id, ...doc.data() };
+                    allData[type].push(data);
+                    if (type === 'jobs') {
+                        itemsHtml += createJobCard(data);
+                    } else {
+                        itemsHtml += createResultCard(data);
+                    }
+                });
+                container.innerHTML += itemsHtml;
+                
+                if (documentSnapshots.docs.length === itemsPerPage) {
+                    loadMoreContainer.innerHTML = `<button data-type="${type}" class="load-more-btn bg-indigo-600 text-white font-semibold px-6 py-2 rounded-lg hover:bg-indigo-700">Load More</button>`;
+                } else {
+                    loadMoreContainer.innerHTML = '';
+                }
+
+            } catch (error) {
+                console.error(`Error fetching ${type}:`, error);
+                container.innerHTML = `<p class="text-red-500 p-4">Error loading ${type}.</p>`;
+            }
+        }
+        
+        function sanitizeText(text) {
+            if (!text) return '';
+            return text.replace(/`/g, "'").replace(/\r/g, '');
         }
 
         function createJobCard(job) {
-            let lastDateHtml = '';
-            if (job.lastDate) {
-                const lastDate = new Date(job.lastDate);
-                const formattedDate = lastDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                lastDateHtml = `<div class="flex items-center font-semibold text-gray-700"><i class="fas fa-calendar-alt w-5 text-center mr-2 text-red-500"></i><span><strong>Last Date:</strong> ${formattedDate}</span></div>`;
-            }
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const lastDate = new Date(job.lastDate);
+            lastDate.setHours(0, 0, 0, 0);
+
+            if (lastDate < today) return ''; // Don't show expired jobs
+
+            const formattedDate = lastDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            const statusHtml = `<div class="flex items-center font-semibold text-gray-700"><i class="fas fa-calendar-alt w-5 text-center mr-2 text-red-500"></i><span><strong>Last Date:</strong> ${formattedDate}</span></div>`;
 
             return `
                 <div class="job-card bg-white p-6 rounded-lg shadow-md border border-gray-200 flex flex-col">
-                    <h4 class="text-lg font-bold text-gray-900">${job.title}</h4>
-                    <p class="text-sm text-gray-500 mb-4">${job.organization}</p>
+                    <h4 class="text-lg font-bold text-gray-900">${sanitizeText(job.title)}</h4>
+                    <p class="text-sm text-gray-500 mb-4">${sanitizeText(job.organization)}</p>
                     <div class="space-y-3 text-gray-700 text-sm flex-grow">
-                        <div class="flex items-center"><i class="fas fa-briefcase w-5 text-center mr-2 text-indigo-500"></i><span><strong>Vacancies:</strong> ${job.vacancies}</span></div>
-                        <div class="flex items-center"><i class="fas fa-graduation-cap w-5 text-center mr-2 text-indigo-500"></i><span><strong>Qualification:</strong> ${job.education}</span></div>
-                        ${lastDateHtml}
+                        <div class="flex items-center"><i class="fas fa-briefcase w-5 text-center mr-2 text-indigo-500"></i><span><strong>Vacancies:</strong> ${sanitizeText(job.vacancies)}</span></div>
+                        <div class="flex items-center"><i class="fas fa-graduation-cap w-5 text-center mr-2 text-indigo-500"></i><span><strong>Qualification:</strong> ${sanitizeText(job.education)}</span></div>
+                        ${statusHtml}
                     </div>
                     <div class="mt-6 pt-4 border-t border-gray-200 flex justify-between items-center flex-wrap gap-2">
                          <button data-jobid="${job.id}" class="summarize-btn bg-blue-100 text-blue-800 font-semibold px-3 py-2 rounded-lg hover:bg-blue-200 transition-colors text-xs">✨ Quick Summary</button>
@@ -326,54 +324,28 @@
                 </div>`;
         }
 
-        function displayJobs() {
-            skeletonLoaderContainer.style.display = 'none';
+        function createResultCard(item) {
+            return `
+                <a href="${item.url}" target="_blank" class="result-card block bg-white p-3 rounded-lg shadow-md border border-gray-200">
+                    <p class="font-semibold text-indigo-700 hover:underline">${sanitizeText(item.title)}</p>
+                </a>
+            `;
+        }
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            const activeJobs = allJobs.filter(job => {
-                const postDate = new Date(job.postedDate);
-                postDate.setHours(0, 0, 0, 0);
-                const lastDate = new Date(job.lastDate);
-                lastDate.setHours(0, 0, 0, 0);
-                
-                return postDate <= today && lastDate >= today;
-            });
-            
-            const searchTerm = searchInput.value.toLowerCase();
-            currentFilteredJobs = activeJobs.filter(job => 
-                job.title.toLowerCase().includes(searchTerm) ||
-                job.organization.toLowerCase().includes(searchTerm) ||
-                job.education.toLowerCase().includes(searchTerm)
-            );
-
-            currentFilteredJobs.sort((a, b) => new Date(b.postedDate) - new Date(a.postedDate));
-
-            const totalPages = Math.ceil(currentFilteredJobs.length / jobsPerPage);
-            
-            const startIndex = (currentPage - 1) * jobsPerPage;
-            const endIndex = startIndex + jobsPerPage;
-            const paginatedJobs = currentFilteredJobs.slice(startIndex, endIndex);
-
-            if (paginatedJobs.length === 0 && searchTerm) {
-                jobListingsContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No jobs found for your search term.</p>`;
-            } else if (paginatedJobs.length === 0 && allJobs.length > 0) {
-                 jobListingsContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center">No active job listings found. Check back later!</p>`;
-            } else if (paginatedJobs.length === 0 && allJobs.length === 0) {
-                 jobListingsContainer.innerHTML = ``; // Skeletons will show
-                 skeletonLoaderContainer.style.display = 'grid';
-            }
-            else {
-                jobListingsContainer.innerHTML = paginatedJobs.map(createJobCard).join('');
-            }
-
-            // Update pagination controls
-            pageIndicator.textContent = `Page ${currentPage} of ${totalPages || 1}`;
-            prevPageBtn.disabled = currentPage === 1;
-            nextPageBtn.disabled = currentPage === totalPages || totalPages === 0;
+        function showSkeletons() {
+            let skeleton = '<div class="skeleton-loader bg-white p-6 rounded-lg shadow-md border border-gray-200 h-48"></div>';
+            document.getElementById('jobs-skeleton-container').innerHTML = skeleton.repeat(6);
+            let smallSkeleton = '<div class="skeleton-loader bg-white p-3 rounded-lg shadow-md border border-gray-200 h-12"></div>';
+            document.getElementById('results-skeleton-container').innerHTML = smallSkeleton.repeat(5);
+            document.getElementById('admit-cards-skeleton-container').innerHTML = smallSkeleton.repeat(5);
         }
         
+        function hideSkeletons() {
+            document.getElementById('jobs-skeleton-container').innerHTML = '';
+            document.getElementById('results-skeleton-container').innerHTML = '';
+            document.getElementById('admit-cards-skeleton-container').innerHTML = '';
+        }
+
         // --- Gemini API Integration ---
         async function callGeminiAPI(prompt, isJson = false) {
             const apiKey = ""; // Leave empty
@@ -408,10 +380,9 @@
             aiModal.classList.remove('hidden');
         }
 
-        // --- Robust Formatting Function ---
         function formatForDisplay(text) {
             if (!text) return "";
-            let html = text
+            let html = sanitizeText(text)
                 .replace(/## (.*)/g, '<h3>$1</h3>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             html = html.replace(/(?:^\* .*(?:\n|$))+/gm, (listBlock) => {
@@ -421,14 +392,19 @@
             return html.replace(/\n/g, '<br>');
         }
 
-        async function handleSummarizeClick(job) {
+        async function handleSummarizeClick(jobId) {
+            const job = allData.jobs.find(j => j.id === jobId);
+            if (!job) return;
             showModal('✨ AI Generated Summary', `<div class="flex items-center justify-center p-8"><div class="btn-spinner" style="width: 40px; height: 40px;"></div><p class="ml-4">Generating summary...</p></div>`);
-            const prompt = `Summarize this government job notification into 5-6 clear bullet points. Focus on the most critical info: Post Name, Vacancies, Eligibility, Last Date, and Selection Process. Notification: --- ${job.notificationText} ---. Format as Markdown using '*' for bullet points.`;
+            const prompt = `Summarize this government job notification into 5-6 clear bullet points. Focus on the most critical info: Post Name, Vacancies, Eligibility, Last Date, and Selection Process. Notification: --- ${sanitizeText(job.notificationText)} ---. Format as Markdown using '*' for bullet points.`;
             const summary = await callGeminiAPI(prompt);
             showModal('✨ AI Generated Summary', formatForDisplay(summary));
         }
 
-        async function handleDetailsClick(job) {
+        async function handleDetailsClick(jobId) {
+            const job = allData.jobs.find(j => j.id === jobId);
+            if (!job) return;
+
             const footerLinks = `
                 <div class="flex flex-col sm:flex-row justify-center gap-4">
                     <a href="${job.applicationUrl}" target="_blank" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 transition-colors w-full sm:w-auto"><i class="fas fa-paper-plane mr-2"></i>Apply Online</a>
@@ -445,8 +421,8 @@
 
             const prompt = `You are an expert at parsing Indian government job notifications. From the following text, extract and structure the information into these specific sections using Markdown. Be comprehensive and clear.
             ## Key Information
-            * **Post Name**: ${job.title}
-            * **Vacancies**: ${job.vacancies}
+            * **Post Name**: ${sanitizeText(job.title)}
+            * **Vacancies**: ${sanitizeText(job.vacancies)}
             * **Salary / Pay Scale**: [Extract Pay Scale]
             * **Age Limit**: [Extract Age Limit, including any relaxation details]
             * **Application Fee**: [Extract Fee Details for all categories]
@@ -460,7 +436,7 @@
             [Extract the stages of the selection process as an ordered or unordered list.]
             ## Syllabus Outline
             [Provide a detailed syllabus outline based on the text. Use nested bullet points for subjects and topics.]
-            Notification Text: --- ${job.notificationText} ---`;
+            Notification Text: --- ${sanitizeText(job.notificationText)} ---`;
 
             const details = await callGeminiAPI(prompt);
             
@@ -475,13 +451,15 @@
             showModal(`Details for ${job.title}`, formatForDisplay(details), footerLinks);
         }
 
-        async function handleCreateStudyPlan(job) {
+        async function handleCreateStudyPlan(jobId) {
+            const job = allData.jobs.find(j => j.id === jobId);
+            if (!job) return;
             showModal(`✨ AI Study Plan for ${job.title}`, `<div class="flex items-center justify-center p-8"><div class="btn-spinner" style="width: 40px; height: 40px;"></div><p class="ml-4">Generating your personalized study plan...</p></div>`, '');
-            const prompt = `You are an expert exam coach for Indian government jobs. Create a comprehensive 4-week study plan for the "${job.title}" exam based on its notification. The plan should be structured, actionable, and easy to follow. Break it down week-by-week and day-by-day. For each day, specify the subjects and key topics to cover from the syllabus. Include time for revision and mock tests. Format the entire output as clean Markdown.
+            const prompt = `You are an expert exam coach for Indian government jobs. Create a comprehensive 4-week study plan for the "${sanitizeText(job.title)}" exam based on its notification. The plan should be structured, actionable, and easy to follow. Break it down week-by-week and day-by-day. For each day, specify the subjects and key topics to cover from the syllabus. Include time for revision and mock tests. Format the entire output as clean Markdown.
             
             Notification Text:
             ---
-            ${job.notificationText}
+            ${sanitizeText(job.notificationText)}
             ---`;
             const plan = await callGeminiAPI(prompt);
             showModal(`✨ AI Study Plan for ${job.title}`, formatForDisplay(plan), '');
@@ -586,141 +564,51 @@
         }
 
         // --- Event Listeners ---
-        searchInput.addEventListener('input', () => { currentPage = 1; displayJobs(); });
+        document.body.addEventListener('click', (e) => {
+            if (e.target.classList.contains('load-more-btn')) {
+                const type = e.target.dataset.type;
+                fetchAndRenderData(type, true);
+            }
+        });
+
         jobListingsContainer.addEventListener('click', (e) => {
             const button = e.target.closest('button');
             if (!button) return;
             const jobId = button.dataset.jobid;
-            const job = allJobs.find(j => j.id === jobId);
-            if (!job) return;
-            if (button.classList.contains('summarize-btn')) handleSummarizeClick(job);
-            if (button.classList.contains('details-btn')) handleDetailsClick(job);
+            if (button.classList.contains('summarize-btn')) handleSummarizeClick(jobId);
+            if (button.classList.contains('details-btn')) handleDetailsClick(jobId);
         });
         modalFooter.addEventListener('click', (e) => {
             const button = e.target.closest('button');
             if(button && button.classList.contains('study-plan-btn')) {
                 const jobId = button.dataset.jobid;
-                const job = allJobs.find(j => j.id === jobId);
-                if (job) handleCreateStudyPlan(job);
+                handleCreateStudyPlan(jobId);
             }
-        });
-        prevPageBtn.addEventListener('click', () => { if (currentPage > 1) { currentPage--; displayJobs(); } });
-        nextPageBtn.addEventListener('click', () => { const totalPages = Math.ceil(currentFilteredJobs.length / jobsPerPage); if (currentPage < totalPages) { currentPage++; displayJobs(); } });
-        closeModalBtn.addEventListener('click', () => aiModal.classList.add('hidden'));
-        aiModal.addEventListener('click', (e) => { if (e.target === aiModal) aiModal.classList.add('hidden'); });
-        getAdviceBtn.addEventListener('click', handleGetAdvice);
-        getQuizBtn.addEventListener('click', handleGenerateQuiz);
-
-        // --- Initial Load ---
-        window.addEventListener('load', () => {
-            createSkeletonCards();
-            setupApp();
         });
         
-        // --- Function to add initial data for demonstration if database is empty ---
-        async function addInitialDataIfNeeded() {
-            const mockJobData = [
-                // A comprehensive list of 100+ jobs with corrected, currently active dates
-                // ... (omitted for brevity, but the full list of 100+ jobs is here)
-                 { title: "IB Security Assistant Recruitment 2025", organization: "Intelligence Bureau", vacancies: "4987", postedDate: "2025-07-26", lastDate: "2025-08-28", education: "10th Pass", applicationUrl: "https://www.mha.gov.in/notifications/vacancies", notificationPdfUrl: "https://www.mha.gov.in/sites/default/files/IB_ACIO_II_2024_ADVT.pdf", notificationText: "Recruitment for Security Assistant/Motor Transport and Multi-Tasking Staff. Age Limit: 18-27 Years. Fee: 500/-. Selection: Tier-I & Tier-II Exams." },
-                { title: "BSF Constable Tradesman Recruitment 2025", organization: "Border Security Force", vacancies: "3588", postedDate: "2025-07-25", lastDate: "2025-08-25", education: "10th Pass + ITI", applicationUrl: "https://rectt.bsf.gov.in/", notificationPdfUrl: "https://rectt.bsf.gov.in/static/bsf/pdf/BSF%20Tradesman%20Recruitment%202024%20Notification.pdf", notificationText: "Constable (Tradesman) for various trades. Age: 18-25. Fee: 100/-. Selection: Written Exam, PST, PET, Trade Test." },
-                { title: "TPSC Agriculture Officer Recruitment 2025", organization: "Tripura PSC", vacancies: "136", postedDate: "2025-07-24", lastDate: "2025-08-22", education: "Degree in Agriculture/Horticulture", applicationUrl: "https://tpsc.tripura.gov.in/", notificationPdfUrl: "https://tpsc.tripura.gov.in/sites/default/files/advt._no.052024.pdf", notificationText: "Tripura Public Service Commission recruitment for Agriculture Officer. Age: 18-40. Fee: 350/-. Selection: Written Exam, Interview." },
-                { title: "PSSSB PTI Teacher Recruitment 2025", organization: "Punjab SSSB", vacancies: "2000", postedDate: "2025-07-23", lastDate: "2025-08-22", education: "D.P.Ed/C.P.Ed", applicationUrl: "https://sssb.punjab.gov.in/", notificationPdfUrl: "https://sssb.punjab.gov.in/Downloads/2024/Advt%20No%2004%20of%202024.pdf", notificationText: `Notification Date: 18 July 2025. Application Start: 23 July 2025. Last Date Apply Online: 22 August 2025. Application Fee for General/EWS/OBC: ₹1000/-. Application Fee for SC/ST/BC/PWD: ₹250/-. Age Limit as on 01.01.2025: Minimum Age 18 Years, Maximum Age 37 Years. Eligibility: 10th Exam Passed with Punjabi and Diploma in Physical Education (D.P.ED/ C.P.ED). Salary: ₹29,200/- Per Month. Selection Process: Written Exam, Physical Test, Documents Verification, Medical Test.` },
-                { title: "RRB Paramedical Recruitment 2025", organization: "Railway Recruitment Board", vacancies: "434", postedDate: "2025-07-22", lastDate: "2025-08-21", education: "Varies (B.Sc, Diploma, 12th)", applicationUrl: "https://www.rrbcdg.gov.in/", notificationPdfUrl: "https://www.rrbcdg.gov.in/uploads/CEN_02_2024_Paramedical_E.pdf", notificationText: "Recruitment for various paramedical categories like Staff Nurse, Pharmacist, Lab Assistant. Age: 18-33. Fee: 500/-. Selection: Single Stage Computer Based Test (CBT)." },
-                { title: "RSSB Platoon Commander Recruitment 2025", organization: "Rajasthan SSB", vacancies: "84", postedDate: "2025-07-21", lastDate: "2025-08-21", education: "Bachelor's Degree", applicationUrl: "https://rsmssb.rajasthan.gov.in/", notificationPdfUrl: "https://rsmssb.rajasthan.gov.in/Static/files/Platoon_Commander_2024_Full_Advt.pdf", notificationText: "Platoon Commander for Home Guard Dept. Age: 20-25. Fee: 600/-. Selection: Written Exam, Physical Test, Interview." },
-                { title: "UPSC EPFO Recruitment 2025", organization: "UPSC", vacancies: "230", postedDate: "2025-07-20", lastDate: "2025-08-30", education: "Bachelor's Degree", applicationUrl: "https://upsconline.nic.in/", notificationPdfUrl: "https://upsc.gov.in/sites/default/files/Advt-No-51-2024-engl.pdf", notificationText: "EO/AO/APFC posts in EPFO. Age: 30-35. Fee: 25/-. Selection: Recruitment Test, Interview." },
-                { title: "Punjab Special Education Teacher Recruitment 2025", organization: "Education Recruitment Board, Punjab", vacancies: "725", postedDate: "2025-07-19", lastDate: "2025-08-18", education: "Bachelor's Degree with B.Ed", applicationUrl: "https://educationrecruitmentboard.com/", notificationPdfUrl: "https://educationrecruitmentboard.com/docs/public_notice_725_posts.pdf", notificationText: "Recruitment for Special Education Teachers. Age: 18-37. Fee: 1000/-. Selection: Written Test." },
-                { title: "PSSSB Group B Recruitment 2025", organization: "Punjab SSSB", vacancies: "367", postedDate: "2025-07-18", lastDate: "2025-08-17", education: "Varies by Post", applicationUrl: "https://sssb.punjab.gov.in/", notificationPdfUrl: "https://sssb.punjab.gov.in/Downloads/2024/Advt%20No%2005%20of%202024.pdf", notificationText: "Group B posts including Inspector. Age: 18-37. Fee: 1000/-. Selection: Written Exam." },
-                { title: "CSBC Bihar Police Driver Constable Recruitment 2025", organization: "CSBC, Bihar", vacancies: "4361", postedDate: "2025-07-17", lastDate: "2025-08-20", education: "10+2 with Driving License", applicationUrl: "https://csbc.bih.nic.in/", notificationPdfUrl: "https://csbc.bih.nic.in/Advt/Advt-03-2024-Driver-Const.pdf", notificationText: "Driver Constable in Bihar Police. Age: 20-25. Fee: 675/-. Selection: Written Exam, PET, Driving Test." },
-                { title: "IB ACIO Recruitment 2025", organization: "Intelligence Bureau", vacancies: "3717", postedDate: "2025-07-16", lastDate: "2025-08-10", education: "Bachelor's Degree", applicationUrl: "https://www.mha.gov.in/notifications/vacancies", notificationPdfUrl: "https://www.mha.gov.in/sites/default/files/ACIO_II_EXE_2024_ADVT.pdf", notificationText: "ACIO Grade-II/Executive. Age: 18-27. Fee: 450/-. Selection: Tier-I, Tier-II, Interview." },
-                { title: "Indian Bank Apprentice Recruitment 2025", organization: "Indian Bank", vacancies: "1500", postedDate: "2025-07-15", lastDate: "2025-08-07", education: "Bachelor's Degree", applicationUrl: "https://www.indianbank.in/careers/", notificationPdfUrl: "https://www.indianbank.in/wp-content/uploads/2024/07/Detailed-Advertisement-for-Engagement-of-Apprentices.pdf", notificationText: "Engagement of Apprentices. Age: 20-28. Fee: 600/-. Selection: Online Written Test." },
-                { title: "Railway SWR Apprentice Recruitment 2025", organization: "South Western Railway", vacancies: "904", postedDate: "2025-07-14", lastDate: "2025-08-12", education: "10th Pass + ITI", applicationUrl: "https://rrchubli.in/", notificationPdfUrl: "https://rrchubli.in/uploads/8909-SWR-Apprentice-Notification.pdf", notificationText: "Apprentice training in various trades. Age: 15-24. Fee: 100/-. Selection: Merit based on 10th & ITI marks." },
-                { title: "Railway ICF Apprentice Recruitment 2025", organization: "Integral Coach Factory, Chennai", vacancies: "1010", postedDate: "2025-07-13", lastDate: "2025-08-21", education: "10th Pass + ITI", applicationUrl: "https://pb.icf.gov.in/", notificationPdfUrl: "https://pb.icf.gov.in/act/notification.pdf", notificationText: "Apprentice training for Ex-ITI and Freshers. Age: 15-24. Fee: 100/-. Selection: Merit based." },
-                { title: "Bank of Baroda LBO Recruitment 2025", organization: "Bank of Baroda", vacancies: "2500", postedDate: "2025-07-12", lastDate: "2025-08-02", education: "Bachelor's Degree", applicationUrl: "https://www.bankofbaroda.in/careers", notificationPdfUrl: "https://www.bankofbaroda.in/-/media/project/bob/countrywebsites/india/careers/lbo-advt-2024.pdf", notificationText: "Lateral Recruitment of Branch Officers. Age: 24-35. Fee: 600/-. Selection: Online Test, Group Discussion, Interview." },
-                { title: "OPSC Veterinary Assistant Surgeon 2025", organization: "Odisha PSC", vacancies: "539", postedDate: "2025-07-11", lastDate: "2025-08-26", education: "B.V.Sc & A.H.", applicationUrl: "https://www.opsc.gov.in/", notificationPdfUrl: "https://www.opsc.gov.in/Public/OPSC/Advt_2024_08.pdf", notificationText: "Recruitment of Veterinary Assistant Surgeons. Age: 21-38. No Fee. Selection: Written Test, Interview." },
-                { title: "UP ECCE Educator Vacancy 2025", organization: "UPSSSC", vacancies: "8800", postedDate: "2025-07-10", lastDate: "2025-08-29", education: "12th Pass with Training", applicationUrl: "http://upsssc.gov.in/", notificationPdfUrl: "http://upsssc.gov.in/Open_PDF_DB.aspx?I4o_S80Q_350", notificationText: "Early Childhood Care and Education (ECCE) Educator posts. Age: 18-40. Fee: 25/-. Selection: Based on PET score and Mains Exam." },
-                { title: "RPSC Veterinary Officer Recruitment 2025", organization: "Rajasthan PSC", vacancies: "1100", postedDate: "2025-07-09", lastDate: "2025-08-15", education: "B.V.Sc & A.H.", applicationUrl: "https://rpsc.rajasthan.gov.in/", notificationPdfUrl: "https://rpsc.rajasthan.gov.in/Static/RecruitmentAdvertisements/VO_Advt_2024.pdf", notificationText: "Veterinary Officer posts. Age: 20-40. Fee: 600/-. Selection: Written Exam, Interview." },
-                { title: "HSSC Group D CET 2025", organization: "Haryana Staff Selection Commission", vacancies: "13536", postedDate: "2025-07-08", lastDate: "2025-08-06", education: "10th Pass", applicationUrl: "https://hssc.gov.in/", notificationPdfUrl: "https://hssc.gov.in/hssccms/uploads/advt/ADVT-CET-GROUP-D-2024.pdf", notificationText: "Common Eligibility Test (CET) for Group D posts in various Haryana Govt departments. Age: 18-42. Fee: 500/-. Selection: CET Score, Socio-Economic Criteria." },
-                { title: "Delhi Police MTS Civilian 2025", organization: "Delhi Police", vacancies: "888", postedDate: "2025-07-07", lastDate: "2025-08-31", education: "10th Pass or ITI", applicationUrl: "https://delhipolice.gov.in/recruitments", notificationPdfUrl: "https://delhipolice.gov.in/uploads/recruitments/MTS_ADVT_2024.pdf", notificationText: "Recruitment for Multi-Tasking Staff (Civilian) in various trades. Age: 18-27. Fee: 100/-. Selection: Written Test, Trade Test." },
-                { title: "UPPSC RO / ARO Recruitment 2025", organization: "Uttar Pradesh PSC", vacancies: "411", postedDate: "2025-07-06", lastDate: "2025-08-24", education: "Bachelor's Degree", applicationUrl: "https://uppsc.up.nic.in/", notificationPdfUrl: "https://uppsc.up.nic.in/OuterPages/View_Enclosure.aspx?ID=540&flag=E&FID=720", notificationText: "Samiksha Adhikari/Sahayak Samiksha Adhikari posts. Age: 21-40. Fee: 125/-. Selection: Prelims Exam, Mains Exam." },
-                { title: "SBI Clerk Junior Associate 2025", organization: "State Bank of India", vacancies: "8773", postedDate: "2025-07-05", lastDate: "2025-08-17", education: "Bachelor's Degree", applicationUrl: "https://sbi.co.in/web/careers", notificationPdfUrl: "https://sbi.co.in/documents/77530/400725/JA_2024_ADVT.pdf", notificationText: "Recruitment of Junior Associates (Customer Support & Sales). Age: 20-28. Fee: 750/-. Selection: Preliminary Exam, Main Exam, Language Proficiency Test." },
-                { title: "DSSSB LDC, Junior Assistant, Steno 2025", organization: "Delhi Subordinate Services Selection Board", vacancies: "2354", postedDate: "2025-07-04", lastDate: "2025-08-18", education: "12th Pass, Typing/Steno Skill", applicationUrl: "https://dsssb.delhi.gov.in/", notificationPdfUrl: "https://dsssb.delhi.gov.in/sites/default/files/dsssb/advertisement/Advt_No_05-2024.pdf", notificationText: "Recruitment for various posts including LDC, Stenographer. Age: 18-27. Fee: 100/-. Selection: One Tier/Two Tier examination scheme and Skill Test where applicable." },
-                { title: "Indian Army Agniveer GD, Clerk 2025", organization: "Join Indian Army", vacancies: "25000+", postedDate: "2025-07-03", lastDate: "2025-08-22", education: "8th, 10th, 12th Pass", applicationUrl: "https://joinindianarmy.nic.in/", notificationPdfUrl: "https://joinindianarmy.nic.in/writereaddata/Portal/BRAVO/Notifications/AGNIVEER_GENERAL_DUTY_WOMEN_MILITARY_POLICE.pdf", notificationText: "Agniveer recruitment for General Duty, Technical, Clerk, Tradesman. Age: 17.5-21. Fee: 250/-. Selection: Online CEE, Physical Fitness Test, Medical Test." },
-                { title: "UP Police Constable Recruitment 2025", organization: "UPPRPB", vacancies: "60244", postedDate: "2025-07-02", lastDate: "2025-08-16", education: "12th Pass", applicationUrl: "https://uppbpb.gov.in/", notificationPdfUrl: "https://uppbpb.gov.in/notice/vig1_23122023.pdf", notificationText: "Recruitment for Constable Civil Police. Age: 18-22 for Male, 18-25 for Female. Fee: 400/-. Selection: Written Exam, Document Verification, PST, PET." },
-                { title: "ISRO Assistant / UDC Recruitment 2025", organization: "Indian Space Research Organisation", vacancies: "526", postedDate: "2025-07-01", lastDate: "2025-08-16", education: "Bachelor's Degree", applicationUrl: "https://www.isro.gov.in/Careers.html", notificationPdfUrl: "https://www.isro.gov.in/media_isro/pdf/recruitmentNotice/2024/Advt_No.ISRO_ICRB_02_2024.pdf", notificationText: "Recruitment for Assistants, Junior Personal Assistants, Upper Division Clerks. Age: 18-28. Fee: 100/-. Selection: Written Test, Skill Test." },
-                { title: "Coast Guard Navik GD / Yantrik 2025", organization: "Indian Coast Guard", vacancies: "320", postedDate: "2025-06-30", lastDate: "2025-08-03", education: "10+2 with Maths/Physics or Diploma", applicationUrl: "https://joinindiancoastguard.cdac.in/cgept/", notificationPdfUrl: "https://joinindiancoastguard.cdac.in/cgept/assets/images/downloads/CGEPT_ADVT_01_2025.pdf", notificationText: "Recruitment for Navik (General Duty) and Yantrik. Age: 18-22. Fee: 300/-. Selection: Stage-I (CBT), Stage-II (PFT, Document Verification), Stage-III (Medical)." },
-                { title: "SSC MTS & Havaldar 2025", organization: "Staff Selection Commission", vacancies: "8326", postedDate: "2025-06-29", lastDate: "2025-08-31", education: "10th Pass", applicationUrl: "https://ssc.gov.in/", notificationPdfUrl: "https://ssc.gov.in/api/attachment/uploads/master/Notice_MTS2024_27062024.pdf", notificationText: "Multi Tasking (Non-Technical) Staff and Havaldar Examination. Age: 18-27. Fee: 100/-. Selection: Computer Based Examination (CBE) and Physical Efficiency Test (PET)/ Physical Standard Test (PST) for Havaldar." },
-                { title: "Railway RPF Constable & SI 2025", organization: "Railway Protection Force", vacancies: "4660", postedDate: "2025-06-28", lastDate: "2025-08-14", education: "10th Pass or Degree", applicationUrl: "https://rpf.indianrailways.gov.in/", notificationPdfUrl: "https://www.rrbcdg.gov.in/uploads/CEN_No_RPF_01_2024_SI.pdf", notificationText: "Recruitment for Sub-Inspectors (SI) and Constables. Age: 20-28 for SI, 18-28 for Constable. Fee: 500/-. Selection: CBT, PET/PMT, Document Verification." },
-                { title: "Bihar Lekhpal IT Sahayak 2025", organization: "Bihar Gram Swaraj Yojna Society", vacancies: "6570", postedDate: "2025-06-27", lastDate: "2025-08-14", education: "B.Com/M.Com/CA", applicationUrl: "https://bgsys.bihar.gov.in/", notificationPdfUrl: "https://bgsys.bihar.gov.in/bgsys/whatsnew/GUIDELINES_FOR_ACCOUNTANT_CUM_IT_ASSISTANT.pdf", notificationText: "Accountant cum IT Assistant posts on contract basis. Age: 21-45. Fee: 500/-. Selection: Computer Based Test." },
-                { title: "UP Panchayat Sahayak / DEO 2025", organization: "Panchayati Raj Dept, UP", vacancies: "4821", postedDate: "2025-06-26", lastDate: "2025-08-30", education: "12th Pass", applicationUrl: "https://panchayatiraj.up.nic.in/", notificationPdfUrl: "https://panchayatiraj.up.nic.in/docs/Office-Memorandum-12-06-2024.pdf", notificationText: "Panchayat Sahayak/Accountant cum Data Entry Operator (DEO). Offline Form. Age: 18-40. No Fee. Selection: Merit basis on 10th and 12th marks." },
-                { title: "NTA CUET UG 2025", organization: "National Testing Agency", vacancies: "N/A", postedDate: "2025-06-25", lastDate: "2025-08-26", education: "12th Pass/Appearing", applicationUrl: "https://exams.nta.ac.in/CUET-UG/", notificationPdfUrl: "https://cdnasb.samarth.ac.in/site-admin23/pn/Info-Bulletin-CUET-UG-2024.pdf", notificationText: "Common University Entrance Test for admission in UG Programs in Central Universities. Fee: 1000/- for 3 subjects. Selection: Computer Based Test." },
-                { title: "SSC Stenographer Grade C & D 2025", organization: "Staff Selection Commission", vacancies: "400+", postedDate: "2025-06-24", lastDate: "2025-08-24", education: "12th Pass", applicationUrl: "https://ssc.gov.in/", notificationPdfUrl: "https://ssc.gov.in/api/attachment/uploads/master/Notice_Steno_26072024.pdf", notificationText: "Stenographer Grade ‘C’ (Group ‘B’, Non-Gazetted) and Stenographer Grade ‘D’ (Group ‘C’). Age: 18-30 for C, 18-27 for D. Fee: 100/-. Selection: CBE and Skill Test in Stenography." },
-                { title: "RBI Assistant Recruitment 2025", organization: "Reserve Bank of India", vacancies: "450", postedDate: "2025-06-23", lastDate: "2025-08-16", education: "Bachelor's Degree", applicationUrl: "https://www.rbi.org.in/", notificationPdfUrl: "https://opportunities.rbi.org.in/Scripts/bs_viewcontent.aspx?Id=4400", notificationText: "Recruitment for the post of Assistant. Age: 20-28. Fee: 450/-. Selection: Preliminary and Main examinations followed by a Language Proficiency Test (LPT)." },
-                { title: "LIC Assistant (ADO) Recruitment 2025", organization: "Life Insurance Corporation of India", vacancies: "5000+", postedDate: "2025-06-22", lastDate: "2025-08-27", education: "Bachelor's Degree", applicationUrl: "https://licindia.in/Bottom-Links/careers", notificationPdfUrl: "https://licindia.in/documents/20121/4483259/Recruitment-of-ADO-24-25.pdf", notificationText: "Apprentice Development Officer posts. Age: 21-30. Fee: 750/-. Selection: Preliminary & Main Online Examination, Interview." },
-                { title: "FCI Category III Recruitment 2025", organization: "Food Corporation of India", vacancies: "4710", postedDate: "2025-06-21", lastDate: "2025-08-25", education: "Varies (Graduate, 10th, 8th)", applicationUrl: "https://fci.gov.in/recruitment-main.php", notificationPdfUrl: "https://fci.gov.in/backend/web/uploads/recruitment/Advt%20No.01-2024.pdf", notificationText: "Recruitment for various Category-III posts like Junior Engineer, Steno, Typist, Assistant Grade-III. Age: 18-28. Fee: 500/-. Selection: Online Test (Phase-I & Phase-II), Skill Test." },
-                { title: "CISF Constable/Driver & DCPO 2025", organization: "Central Industrial Security Force", vacancies: "451", postedDate: "2025-06-20", lastDate: "2025-08-22", education: "10th Pass with Driving License", applicationUrl: "https://cisfrectt.cisf.gov.in/", notificationPdfUrl: "https://cisfrectt.cisf.gov.in/pdf/notification_ct_driver_dcpo.pdf", notificationText: "Constable/Driver & Constable/Driver-Cum-Pump-Operator. Age: 21-27. Fee: 100/-. Selection: PET/PST, Documentation, Trade Test, Written Examination, Medical Exam." },
-                { title: "DRDO CEPTAM 11 A&A Recruitment 2025", organization: "Defence Research and Development Organisation", vacancies: "1061", postedDate: "2025-06-19", lastDate: "2025-08-09", education: "10th, 12th, Degree", applicationUrl: "https://www.drdo.gov.in/drdo/ceptam-advertisement", notificationPdfUrl: "https://www.drdo.gov.in/sites/default/files/ceptam-advt-publications/ceptam11_advt_aa.pdf", notificationText: "Recruitment for Admin & Allied (A&A) Cadre posts. Age: 18-27. Fee: 100/-. Selection: Tier-I (CBT), Tier-II (Skill/Physical/Capability Test, as applicable)." },
-                { title: "Indian Post Office GDS Recruitment 2025", organization: "India Post", vacancies: "30041", postedDate: "2025-06-18", lastDate: "2025-08-23", education: "10th Pass", applicationUrl: "https://indiapostgdsonline.gov.in/", notificationPdfUrl: "https://indiapostgdsonline.gov.in/Docs/Instruction_v1.pdf", notificationText: "Gramin Dak Sevaks (GDS) [Branch Postmaster (BPM)/Assistant Branch Postmaster (ABPM)]. Age: 18-40. Fee: 100/-. Selection: Merit based on 10th class marks. No exam." },
-                { title: "SSC CPO SI 2025", organization: "Staff Selection Commission", vacancies: "4300", postedDate: "2025-06-17", lastDate: "2025-08-15", education: "Bachelor's Degree", applicationUrl: "https://ssc.gov.in/", notificationPdfUrl: "https://ssc.gov.in/api/attachment/uploads/master/Notice_SICPO2024_15072024.pdf", notificationText: "Sub-Inspector in Delhi Police and Central Armed Police Forces Examination. Age: 20-25. Fee: 100/-. Selection: Paper-I, PET/PST, Paper-II, and Detailed Medical Examination." },
-                { title: "UPSC Civil Services Exam 2026", organization: "UPSC", vacancies: "1105", postedDate: "2025-06-27", lastDate: "2025-09-20", education: "Bachelor's Degree", applicationUrl: "https://upsconline.nic.in/", notificationPdfUrl: "https://upsc.gov.in/sites/default/files/Notif-CSE-2025-engl-14022025.pdf", notificationText: "Civil Services Examination for IAS, IPS, IFS, etc. Age: 21-32. Fee: 100/-. Selection: Prelims, Mains, Interview." },
-                { title: "SBI PO Recruitment 2025", organization: "State Bank of India", vacancies: "2000", postedDate: "2025-06-28", lastDate: "2025-09-25", education: "Bachelor's Degree", applicationUrl: "https://sbi.co.in/web/careers", notificationPdfUrl: "https://sbi.co.in/documents/77530/400725/PO_2025_ADVT.pdf", notificationText: "Probationary Officer recruitment. Age: 21-30. Fee: 750/-. Selection: Prelims, Mains, Psychometric Test, Interview." },
-                { title: "RRB NTPC Recruitment 2025", organization: "Railway Recruitment Board", vacancies: "35281", postedDate: "2025-06-29", lastDate: "2025-10-01", education: "12th Pass / Graduate", applicationUrl: "https://www.rrbcdg.gov.in/", notificationPdfUrl: "https://www.rrbcdg.gov.in/uploads/CEN_01_2025_NTPC_E.pdf", notificationText: "Non-Technical Popular Categories (NTPC) posts. Age: 18-33. Fee: 500/-. Selection: 2-Stage CBT, Skill Test, Document Verification." },
-                { title: "IBPS Clerk Recruitment 2025", organization: "IBPS", vacancies: "7855", postedDate: "2025-06-30", lastDate: "2025-09-27", education: "Bachelor's Degree", applicationUrl: "https://www.ibps.in/", notificationPdfUrl: "https://www.ibps.in/wp-content/uploads/CRP_Clerks_XV_ADVT.pdf", notificationText: "Clerical cadre posts in participating banks. Age: 20-28. Fee: 850/-. Selection: Prelims, Mains." },
-                { title: "UP TGT PGT Teacher Recruitment 2025", organization: "UPSESSB", vacancies: "4163", postedDate: "2025-07-01", lastDate: "2025-09-30", education: "Graduate + B.Ed / Master's", applicationUrl: "http://www.upsessb.org/", notificationPdfUrl: "http://www.upsessb.org/content/TGT_VIGYAPAN_2025.pdf", notificationText: "Trained Graduate Teacher (TGT) and Post Graduate Teacher (PGT) recruitment. Age: Min 21. Fee: 750/-. Selection: Written Exam." },
-                { title: "Bihar Police SI Recruitment 2025", organization: "BPSSC", vacancies: "1275", postedDate: "2025-07-01", lastDate: "2025-10-05", education: "Bachelor's Degree", applicationUrl: "https://bpssc.bih.nic.in/", notificationPdfUrl: "https://bpssc.bih.nic.in/Advt/Advt-02-2025-SI.pdf", notificationText: "Sub-Inspector posts in Bihar Police. Age: 20-37. Fee: 700/-. Selection: Prelims, Mains, PET." },
-                { title: "Rajasthan Police Constable 2025", organization: "Rajasthan Police", vacancies: "3578", postedDate: "2025-07-02", lastDate: "2025-10-01", education: "12th Pass", applicationUrl: "https://www.police.rajasthan.gov.in/", notificationPdfUrl: "https://www.police.rajasthan.gov.in/old/Upload/PressRelease/3578_Constable_Recruitment_2025.pdf", notificationText: "Constable recruitment. Age: 18-24. Fee: 600/-. Selection: PET/PST, CBT." },
-                { title: "Delhi High Court JPA / SPA 2025", organization: "Delhi High Court", vacancies: "127", postedDate: "2025-07-03", lastDate: "2025-09-28", education: "Graduate + Shorthand", applicationUrl: "https://delhihighcourt.nic.in/recruitments", notificationPdfUrl: "https://delhihighcourt.nic.in/writereaddata/upload/Recruitments/OpenPositions_JJA_2025.pdf", notificationText: "Junior Judicial Assistant and Senior Personal Assistant posts. Age: 18-32. Fee: 1000/-. Selection: Prelims, Mains, Interview." },
-                { title: "Allahabad High Court RO / ARO 2025", organization: "Allahabad High Court", vacancies: "396", postedDate: "2025-07-04", lastDate: "2025-10-05", education: "Bachelor's Degree + Computer Diploma", applicationUrl: "https://www.allahabadhighcourt.in/recruitment.html", notificationPdfUrl: "https://www.allahabadhighcourt.in/event/ro_aro_advt_2025.pdf", notificationText: "Review Officer and Assistant Review Officer. Age: 21-35. Fee: 800/-. Selection: Written Exam, Computer Knowledge Test." },
-                { title: "KVS TGT, PGT, PRT Recruitment 2025", organization: "Kendriya Vidyalaya Sangathan", vacancies: "12500", postedDate: "2025-07-05", lastDate: "2025-10-10", education: "Varies (Degree, B.Ed, CTET)", applicationUrl: "https://kvsangathan.nic.in/", notificationPdfUrl: "https://kvsangathan.nic.in/sites/default/files/hq/ANN-ADVT-15-28-11-2025.pdf", notificationText: "Recruitment for TGT, PGT, PRT and other posts. Age: Varies. Fee: 1500-2300/-. Selection: CBT, Interview." },
-                { title: "NVS TGT, PGT Recruitment 2025", organization: "Navodaya Vidyalaya Samiti", vacancies: "2370", postedDate: "2025-07-06", lastDate: "2025-10-12", education: "Master's/Bachelor's + B.Ed", applicationUrl: "https://navodaya.gov.in/nvs/en/Recruitment/Notification/", notificationPdfUrl: "https://navodaya.gov.in/uploads/NVS_Recruitment_2025.pdf", notificationText: "Recruitment for teaching posts. Age: Max 40 for TGT, Max 50 for PGT. Fee: 1500-2000/-. Selection: CBT, Interview." },
-                { title: "Indian Oil IOCL Apprentice 2025", organization: "Indian Oil Corporation Limited", vacancies: "1720", postedDate: "2025-07-07", lastDate: "2025-10-05", education: "ITI, Diploma, Graduate", applicationUrl: "https://iocl.com/apprenticeships", notificationPdfUrl: "https://iocl.com/download/Apprentices_2025_Notification.pdf", notificationText: "Trade & Technician Apprentices. Age: 18-24. No Fee. Selection: Written Test." },
-                { title: "GAIL Executive Trainee 2025", organization: "GAIL India Limited", vacancies: "47", postedDate: "2025-07-08", lastDate: "2025-10-08", education: "B.E./B.Tech", applicationUrl: "https://gailonline.com/CR-ApplyingGail.html", notificationPdfUrl: "https://gailonline.com/careers/GAIL_ET_2025_ADVT.pdf", notificationText: "Executive Trainee through GATE 2025 score. Age: Max 26. Fee: 200/-. Selection: GATE Score, GD, Interview." },
-                { title: "Power Grid Engineer Trainee 2025", organization: "PGCIL", vacancies: "425", postedDate: "2025-07-09", lastDate: "2025-10-15", education: "B.E./B.Tech/B.Sc (Engg)", applicationUrl: "https://www.powergrid.in/job-opportunities", notificationPdfUrl: "https://www.powergrid.in/sites/default/files/ET_2025_ADVT.pdf", notificationText: "Engineer Trainee in Electrical/Civil/Electronics. Age: Max 28. Fee: 500/-. Selection: GATE 2025 Score, GD, Interview." },
-                { title: "Coal India Management Trainee 2025", organization: "Coal India Limited", vacancies: "560", postedDate: "2025-07-10", lastDate: "2025-10-18", education: "B.E./B.Tech/CA/Graduate", applicationUrl: "https://www.coalindia.in/career-cil/", notificationPdfUrl: "https://www.coalindia.in/media/docs/MT_2025_ADVT.pdf", notificationText: "Management Trainee in various disciplines. Age: Max 30. Fee: 1180/-. Selection: CBT, Interview." },
-                { title: "AAI Junior Executive ATC 2025", organization: "Airports Authority of India", vacancies: "496", postedDate: "2025-07-11", lastDate: "2025-10-20", education: "B.Sc with Physics & Maths", applicationUrl: "https://www.aai.aero/en/careers/recruitment", notificationPdfUrl: "https://www.aai.aero/sites/default/files/examdashboard_advertisement/ATC_ADVT_2025.pdf", notificationText: "Junior Executive (Air Traffic Control). Age: Max 27. Fee: 1000/-. Selection: Online Exam, Voice Test." },
-                { title: "UP Metro Various Post Recruitment 2025", organization: "UP Metro Rail Corporation", vacancies: "439", postedDate: "2025-07-12", lastDate: "2025-10-19", education: "ITI, Diploma, Degree", applicationUrl: "https://lmrcl.com/recruitment/", notificationPdfUrl: "https://lmrcl.com/media/recruitment/LMRC_ADVT_2025.pdf", notificationText: "Recruitment for various executive and non-executive posts. Age: 21-28. Fee: 1180/-. Selection: Written Test, Psycho Test, Medical Exam." },
-                { title: "BECIL Various Posts 2025", organization: "Broadcast Engineering Consultants India Ltd", vacancies: "250", postedDate: "2025-07-13", lastDate: "2025-10-15", education: "Varies", applicationUrl: "https://www.becil.com/vacancies", notificationPdfUrl: "https://www.becil.com/uploads/vacancy/Advt2025.pdf", notificationText: "Contractual posts for various government projects. Age: Varies. Fee: 885/-. Selection: Skill Test/Interview." },
-                { title: "MP High Court Steno / Assistant 2025", organization: "Madhya Pradesh High Court", vacancies: "1255", postedDate: "2025-07-14", lastDate: "2025-10-25", education: "Graduate + Steno/Typing", applicationUrl: "https://mphc.gov.in/recruitment-result", notificationPdfUrl: "https://mphc.gov.in/PDF/ADVT_Steno_2025.pdf", notificationText: "Stenographer and Assistant Grade-3 posts. Age: 18-40. Fee: 777/-. Selection: Prelims, Mains." },
-                { title: "Patna High Court Assistant 2025", organization: "Patna High Court", vacancies: "550", postedDate: "2025-07-15", lastDate: "2025-10-22", education: "Graduate + Computer Diploma", applicationUrl: "https://patnahighcourt.gov.in/Recruitments", notificationPdfUrl: "https://patnahighcourt.gov.in/exam/recruitment/ADVT_Asst_2025.pdf", notificationText: "Assistant (Group B) posts. Age: 18-37. Fee: 1200/-. Selection: Prelims, Mains, Computer Proficiency Test, Interview." }
-            ];
-            
-            const jobsCollectionRef = collection(db, `artifacts/${appId}/public/data/jobs`);
-            console.log("Database is empty. Adding initial data...");
-            for (const jobData of mockJobData) {
-                try {
-                    await addDoc(jobsCollectionRef, jobData);
-                } catch (error) {
-                    console.error("Error adding document: ", error);
-                }
-            }
-        }
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tab = button.dataset.tab;
+                
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.classList.add('text-gray-500', 'hover:text-indigo-600');
+                });
+                button.classList.add('active');
+                button.classList.remove('text-gray-500', 'hover:text-indigo-600');
 
-        // --- Event Listeners and Initial Load ---
-        searchInput.addEventListener('input', () => { currentPage = 1; displayJobs(); });
-        jobListingsContainer.addEventListener('click', (e) => {
-            const button = e.target.closest('button');
-            if (!button) return;
-            const jobId = button.dataset.jobid;
-            const job = allJobs.find(j => j.id === jobId);
-            if (!job) return;
-            if (button.classList.contains('summarize-btn')) handleSummarizeClick(job);
-            if (button.classList.contains('details-btn')) handleDetailsClick(job);
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.add('hidden');
+                });
+                document.getElementById(`${tab}-content`).classList.remove('hidden');
+            });
         });
-        modalFooter.addEventListener('click', (e) => {
-            const button = e.target.closest('button');
-            if(button && button.classList.contains('study-plan-btn')) {
-                const jobId = button.dataset.jobid;
-                const job = allJobs.find(j => j.id === jobId);
-                if (job) handleCreateStudyPlan(job);
-            }
-        });
-        prevPageBtn.addEventListener('click', () => { if (currentPage > 1) { currentPage--; displayJobs(); } });
-        nextPageBtn.addEventListener('click', () => { const totalPages = Math.ceil(currentFilteredJobs.length / jobsPerPage); if (currentPage < totalPages) { currentPage++; displayJobs(); } });
+
         closeModalBtn.addEventListener('click', () => aiModal.classList.add('hidden'));
         aiModal.addEventListener('click', (e) => { if (e.target === aiModal) aiModal.classList.add('hidden'); });
         getAdviceBtn.addEventListener('click', handleGetAdvice);
         getQuizBtn.addEventListener('click', handleGenerateQuiz);
-        window.addEventListener('load', () => { createSkeletonCards(); setupApp(); });
+        window.addEventListener('load', setupApp);
 
     </script>
 </body>
