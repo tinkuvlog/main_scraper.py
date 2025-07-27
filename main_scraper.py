@@ -131,7 +131,7 @@ def scrape_section(db, app_id, section_id, collection_name):
 
                 prompt = ""
                 if collection_name == 'jobs':
-                    prompt = f"""Analyze the text for a job notification. Extract details as a JSON object with keys: "title", "organization", "vacancies", "postedDate" (YYYY-MM-DD), "lastDate" (YYYY-MM-DD), "education", "notificationText". Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the text for a job notification. Extract details as a JSON object with keys: "title", "organization", "vacancies", "postedDate" (YYYY-MM-DD), "lastDate" (YYYY-MM-DD), "education", "description" (a one-sentence summary), "notificationText". Use this title: "{title}". Text: --- {notification_text} ---"""
                 elif collection_name == 'results':
                     prompt = f"""Analyze the text for a result notification. Extract details as a JSON object with keys: "title", "organization", "postedDate" (Result Date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
                 elif collection_name == 'admitCards':
@@ -155,7 +155,7 @@ def scrape_section(db, app_id, section_id, collection_name):
             except Exception as e:
                 print(f"Could not process details for '{title}': {e}")
             
-            time.sleep(5) 
+            time.sleep(10) # Increased delay to 10 seconds to be safe
 
     except Exception as e:
         print(f"An error occurred while scraping section {section_id}: {e}")
