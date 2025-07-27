@@ -18,7 +18,6 @@ def initialize_firebase():
         service_account_info = json.loads(service_account_key_json)
         cred = credentials.Certificate(service_account_info)
         
-        # Check if the app is already initialized to prevent errors on re-runs
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
             
@@ -48,7 +47,6 @@ def call_gemini_api(prompt):
         
         text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
         
-        # Clean the response to ensure it's valid JSON
         if text:
             text = text.strip().replace('```json', '').replace('```', '').strip()
         
@@ -65,7 +63,6 @@ def call_gemini_api(prompt):
 
 def scrape_website(db, app_id):
     """Scrapes the job listing website, processes new jobs, and adds them to Firestore."""
-    # Using a more reliable source that is less likely to block scrapers
     URL = "https://www.sarkariresult.com.im/latestjob/"
     
     print(f"Scraping {URL} for new jobs...")
@@ -76,7 +73,14 @@ def scrape_website(db, app_id):
         page.raise_for_status()
         
         soup = BeautifulSoup(page.content, "html.parser")
-        job_links = soup.select("#post a") # Selects all links within the #post div
+        
+        # ** IMPROVED SCRAPING LOGIC **
+        # This selector is more specific and robust. It looks for list items within the main post content.
+        job_links = soup.select("#post ul li a") 
+
+        if not job_links:
+            print("Could not find any job links using the specified selector. The website structure may have changed.")
+            return
 
         print(f"Found {len(job_links)} potential job links.")
 
@@ -87,7 +91,6 @@ def scrape_website(db, app_id):
             if not job_title or not job_url:
                 continue
 
-            # Check if the job already exists in Firestore to avoid duplicates
             jobs_ref = db.collection(f"artifacts/{app_id}/public/data/jobs")
             existing_job_query = jobs_ref.where("title", "==", job_title).limit(1).get()
             
@@ -97,13 +100,11 @@ def scrape_website(db, app_id):
 
             print(f"Processing new job: {job_title}")
             
-            # Scrape the individual job page for its full text content
             try:
                 job_page = requests.get(job_url, headers=headers, timeout=30)
                 job_page.raise_for_status()
                 job_soup = BeautifulSoup(job_page.content, "html.parser")
                 
-                # Extract all visible text from the main content area of the job page
                 content_div = job_soup.find("div", id="post")
                 if content_div:
                     notification_text = content_div.get_text(separator="\n", strip=True)
@@ -111,7 +112,6 @@ def scrape_website(db, app_id):
                     print(f"Could not find content div for '{job_title}'. Skipping.")
                     continue
                 
-                # Create the prompt for the Gemini API
                 prompt = f"""
                 You are an expert government job notification analyst. Analyze the following text and extract the key information.
                 Provide the output ONLY as a valid JSON object. Do not include any text before or after the JSON.
@@ -134,11 +134,9 @@ def scrape_website(db, app_id):
                 job_data = call_gemini_api(prompt)
 
                 if job_data:
-                    # The application and PDF links are the same as the job URL on this site
                     job_data["applicationUrl"] = job_url
                     job_data["notificationPdfUrl"] = job_url
                     
-                    # Save the new job to Firestore
                     jobs_ref.add(job_data)
                     print(f"Successfully added job: {job_data['title']}")
                 else:
@@ -165,5 +163,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
