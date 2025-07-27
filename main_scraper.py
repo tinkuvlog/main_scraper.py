@@ -82,7 +82,6 @@ def scrape_section(db, app_id, section_id, collection_name):
         all_lists = soup.find_all('ul')
         item_links = []
         
-        # Keywords to identify valid posts and ignore navigation links
         valid_keywords = ['recruitment', 'online', 'result', 'admit card', 'answer key', 'marks', 'admission', 'counseling']
         ignore_keywords = ['home', 'jobs', 'yojana', 'contact us', 'privacy policy']
 
@@ -99,9 +98,14 @@ def scrape_section(db, app_id, section_id, collection_name):
             print(f"Could not find any potential links in section '{section_id}'.")
             return
 
-        print(f"Found {len(item_links)} potential links in {collection_name} section.")
+        print(f"Found {len(item_links)} total links. Processing the top 10 new items.")
 
+        processed_count = 0
         for link in item_links:
+            if processed_count >= 10:
+                print("Processed 10 new items for this section. Stopping to avoid rate limits.")
+                break
+
             title = link.text.strip()
             url = link.get("href")
 
@@ -113,7 +117,7 @@ def scrape_section(db, app_id, section_id, collection_name):
             existing_item_query = items_ref.where("baseTitle", "==", base_title).limit(1).get()
             
             if len(existing_item_query) > 0:
-                print(f"{collection_name[:-1].capitalize()} '{title}' seems to be a duplicate. Skipping.")
+                # This item already exists, so we don't count it towards our new item limit
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
@@ -127,11 +131,11 @@ def scrape_section(db, app_id, section_id, collection_name):
 
                 prompt = ""
                 if collection_name == 'jobs':
-                    prompt = f"""Analyze the text for a job notification. Extract details as a JSON object with these keys: "title", "organization", "vacancies", "postedDate" (YYYY-MM-DD), "lastDate" (YYYY-MM-DD), "education", "notificationText". Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the text for a job notification. Extract details as a JSON object with keys: "title", "organization", "vacancies", "postedDate" (YYYY-MM-DD), "lastDate" (YYYY-MM-DD), "education", "notificationText". Use this title: "{title}". Text: --- {notification_text} ---"""
                 elif collection_name == 'results':
-                    prompt = f"""Analyze the text for a result notification. Extract details as a JSON object with these keys: "title", "organization", "postedDate" (Result Date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the text for a result notification. Extract details as a JSON object with keys: "title", "organization", "postedDate" (Result Date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
                 elif collection_name == 'admitCards':
-                    prompt = f"""Analyze the text for an admit card notification. Extract details as a JSON object with these keys: "title", "organization", "lastDate" (Exam Date, in YYYY-MM-DD format), "postedDate" (Admit Card release date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the text for an admit card notification. Extract details as a JSON object with keys: "title", "organization", "lastDate" (Exam Date, in YYYY-MM-DD format), "postedDate" (Admit Card release date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
 
                 structured_data = call_gemini_api(prompt)
 
@@ -144,6 +148,7 @@ def scrape_section(db, app_id, section_id, collection_name):
                     
                     items_ref.add(structured_data)
                     print(f"Successfully added {collection_name[:-1]}: {title}")
+                    processed_count += 1
                 else:
                     print(f"Failed to process data for: {title}")
 
