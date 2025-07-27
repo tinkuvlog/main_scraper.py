@@ -1,6 +1,6 @@
 name: Run Job Scraper
 
-on:4567891011121314151617181920212223242526272829321$0
+on:
   workflow_dispatch: # Allows manual running
   schedule:
     - cron: '0 0,12 * * *' # Runs at midnight and noon UTC
