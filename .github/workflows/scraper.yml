@@ -1,6 +1,6 @@
 name: Run Job Scraper
 
-on:
+on:4567891011121314151617181920212223242526272829321$0
   workflow_dispatch: # Allows manual running
   schedule:
     - cron: '0 0,12 * * *' # Runs at midnight and noon UTC
@@ -26,5 +26,6 @@ jobs:
       - name: Run Scraper
         env:
           FIREBASE_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FIREBASE_PROJECT_ID: my-job-porta
         run: python main_scraper.py
