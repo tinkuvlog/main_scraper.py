@@ -28,8 +28,8 @@ def initialize_firebase():
         print(f"An error occurred during Firebase initialization: {e}")
         return None
 
-def call_gemini_api_for_job_details(prompt, job_title):
-    """Calls Gemini API to extract structured data for a job posting."""
+def call_gemini_api(prompt):
+    """Calls the Gemini API to process the notification text."""
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         print("ERROR: GEMINI_API_KEY not found in environment variables.")
@@ -56,15 +56,18 @@ def call_gemini_api_for_job_details(prompt, job_title):
             text = text.strip().replace('```json', '').replace('```', '').strip()
         
         return json.loads(text)
-    except requests.exceptions.RequestException as e:
-        print(f"Error calling Gemini API: {e}")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from Gemini API response: {e}")
-        print(f"Raw response text: {text}")
     except Exception as e:
-        print(f"An unexpected error occurred in call_gemini_api_for_job_details: {e}")
+        print(f"An error occurred in call_gemini_api: {e}")
     return None
 
+def get_base_title(title):
+    """Creates a simplified, unique identifier for a job title to prevent duplicates."""
+    # Remove common extra words and standardize the title
+    title = title.lower()
+    title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4}|posts|post|\[|\]', '', title)
+    # Remove extra spaces
+    title = ' '.join(title.split())
+    return title
 
 def scrape_section(db, app_id, section_id, collection_name):
     """Scrapes a specific section (Latest Jobs, Results, Admit Cards) from the website."""
@@ -78,22 +81,16 @@ def scrape_section(db, app_id, section_id, collection_name):
         
         soup = BeautifulSoup(page.content, "html.parser")
         
-        # ** MORE ROBUST SCRAPING LOGIC **
-        # Find all unordered lists, which is where jobs are typically listed.
         all_lists = soup.find_all('ul')
         item_links = []
 
         for lst in all_lists:
             links = lst.find_all('a')
             for link in links:
-                href = link.get('href')
-                text = link.text.strip()
-                # A better heuristic: if the link text contains a year or common keywords, it's likely a job post.
-                if href and (re.search(r'\d{4}', text) or "recruitment" in text.lower() or "online form" in text.lower() or "result" in text.lower() or "admit card" in text.lower()):
-                     item_links.append(link)
+                item_links.append(link)
 
         if not item_links:
-            print(f"Could not find any potential links in section '{section_id}'. The website structure may have changed significantly.")
+            print(f"Could not find any potential links in section '{section_id}'.")
             return
 
         print(f"Found {len(item_links)} potential links in {collection_name} section.")
@@ -105,70 +102,51 @@ def scrape_section(db, app_id, section_id, collection_name):
             if not title or not url:
                 continue
 
+            # Advanced duplicate check
+            base_title = get_base_title(title)
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
-            existing_item_query = items_ref.where("title", "==", title).limit(1).get()
+            # We will check based on the simplified base title to avoid duplicates
+            existing_item_query = items_ref.where("baseTitle", "==", base_title).limit(1).get()
             
             if len(existing_item_query) > 0:
-                print(f"{collection_name[:-1].capitalize()} '{title}' already exists. Skipping.")
+                print(f"{collection_name[:-1].capitalize()} '{title}' seems to be a duplicate. Skipping.")
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
-
-            item_data = {
-                "title": title,
-                "url": url,
-                "postedDate": datetime.now().strftime("%Y-%m-%d")
-            }
             
-            # If it's a job, we need to get more details
-            if collection_name == 'jobs':
-                try:
-                    job_page = requests.get(url, headers=headers, timeout=30)
-                    job_page.raise_for_status()
-                    job_soup = BeautifulSoup(job_page.content, "html.parser")
+            try:
+                job_page = requests.get(url, headers=headers, timeout=30)
+                job_page.raise_for_status()
+                job_soup = BeautifulSoup(job_page.content, "html.parser")
+                content_div = job_soup.find("div", id="post")
+                notification_text = content_div.get_text(separator="\n", strip=True) if content_div else ""
+
+                prompt = ""
+                if collection_name == 'jobs':
+                    prompt = f"""Analyze the text for a job notification. Extract details as a JSON object with these keys: "title", "organization", "vacancies", "postedDate" (YYYY-MM-DD), "lastDate" (YYYY-MM-DD), "education", "notificationText". Use this title: "{title}". Text: --- {notification_text} ---"""
+                elif collection_name == 'results':
+                    prompt = f"""Analyze the text for a result notification. Extract details as a JSON object with these keys: "title", "organization", "postedDate" (Result Date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
+                elif collection_name == 'admitCards':
+                    prompt = f"""Analyze the text for an admit card notification. Extract details as a JSON object with these keys: "title", "organization", "lastDate" (Exam Date, in YYYY-MM-DD format), "postedDate" (Admit Card release date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
+
+                structured_data = call_gemini_api(prompt)
+
+                if structured_data:
+                    structured_data["url"] = url
+                    structured_data["baseTitle"] = base_title # Add the base title for duplicate checking
+                    if collection_name == 'jobs':
+                        structured_data["applicationUrl"] = url
+                        structured_data["notificationPdfUrl"] = url
                     
-                    content_div = job_soup.find("div", id="post")
-                    if content_div:
-                        notification_text = content_div.get_text(separator="\n", strip=True)
-                    else:
-                        notification_text = job_soup.get_text(separator="\n", strip=True)
-                        print("Could not find content div on job page, using all page text as a fallback.")
+                    items_ref.add(structured_data)
+                    print(f"Successfully added {collection_name[:-1]}: {title}")
+                else:
+                    print(f"Failed to process data for: {title}")
 
-                    
-                    prompt = f"""
-                    You are an expert government job notification analyst. Analyze the following text and extract the key information.
-                    Provide the output ONLY as a valid JSON object. Do not include any text before or after the JSON.
-
-                    The JSON object must have these exact keys:
-                    - "title": The official name of the recruitment or exam. Use the title: "{title}".
-                    - "organization": The name of the recruiting body (e.g., Staff Selection Commission).
-                    - "vacancies": The total number of posts as a string (e.g., "17,727", "Not Specified").
-                    - "postedDate": The application start date, in "YYYY-MM-DD" format.
-                    - "lastDate": The last date to apply, in "YYYY-MM-DD" format.
-                    - "education": A concise summary of the required qualification (e.g., "10+2 Intermediate", "Bachelor's Degree").
-                    - "notificationText": A detailed summary including age limits, application fees for different categories, the full selection process, and a syllabus outline.
-
-                    Here is the text to analyze:
-                    ---
-                    {notification_text}
-                    ---
-                    """
-
-                    structured_data = call_gemini_api_for_job_details(prompt, title)
-                    if structured_data:
-                        item_data.update(structured_data)
-                        item_data["applicationUrl"] = url
-                        item_data["notificationPdfUrl"] = url
-                    else:
-                        print(f"Failed to process job data for: {title}")
-                        continue # Skip if AI fails
-                except Exception as e:
-                    print(f"Could not process details for job '{title}': {e}")
-                    continue # Skip adding the job if details can't be processed
-
-            items_ref.add(item_data)
-            print(f"Successfully added {collection_name[:-1]}: {title}")
-            time.sleep(2)
+            except Exception as e:
+                print(f"Could not process details for '{title}': {e}")
+            
+            time.sleep(2) 
 
     except Exception as e:
         print(f"An error occurred while scraping section {section_id}: {e}")
