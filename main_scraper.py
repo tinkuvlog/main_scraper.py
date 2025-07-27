@@ -56,93 +56,131 @@ def call_gemini_api_for_job_details(prompt, job_title):
             text = text.strip().replace('```json', '').replace('```', '').strip()
         
         return json.loads(text)
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Gemini API: {e}")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON from Gemini API response: {e}")
+        print(f"Raw response text: {text}")
     except Exception as e:
-        print(f"An error occurred in call_gemini_api_for_job_details: {e}")
+        print(f"An unexpected error occurred in call_gemini_api_for_job_details: {e}")
     return None
 
-def scrape_ssc(db, app_id):
-    """Scrapes the official Staff Selection Commission (SSC) website."""
-    URL = "https://ssc.gov.in/portal/latest-news"
-    print(f"Scraping SSC: {URL}")
+
+def scrape_section(db, app_id, section_id, collection_name):
+    """Scrapes a specific section (Latest Jobs, Results, Admit Cards) from the website."""
+    URL = f"https://www.sarkariresult.com.im/{section_id}/"
+    print(f"Scraping {URL} for new {collection_name}...")
     
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         page = requests.get(URL, headers=headers, timeout=30)
         page.raise_for_status()
+        
         soup = BeautifulSoup(page.content, "html.parser")
         
-        # This selector targets the rows in the latest news table
-        news_items = soup.select(".view-content table tbody tr")
-        print(f"Found {len(news_items)} items on SSC.")
+        # ** MORE ROBUST SCRAPING LOGIC **
+        # Find all unordered lists, which is where jobs are typically listed.
+        all_lists = soup.find_all('ul')
+        item_links = []
 
-        for item in news_items:
-            title_tag = item.find('a')
-            if not title_tag:
+        for lst in all_lists:
+            links = lst.find_all('a')
+            for link in links:
+                href = link.get('href')
+                text = link.text.strip()
+                # A better heuristic: if the link text contains a year or common keywords, it's likely a job post.
+                if href and (re.search(r'\d{4}', text) or "recruitment" in text.lower() or "online form" in text.lower() or "result" in text.lower() or "admit card" in text.lower()):
+                     item_links.append(link)
+
+        if not item_links:
+            print(f"Could not find any potential links in section '{section_id}'. The website structure may have changed significantly.")
+            return
+
+        print(f"Found {len(item_links)} potential links in {collection_name} section.")
+
+        for link in item_links:
+            title = link.text.strip()
+            url = link.get("href")
+
+            if not title or not url:
                 continue
-            
-            title = title_tag.text.strip()
-            url = "https://ssc.gov.in" + title_tag.get('href')
-            
-            # Basic categorization based on title keywords
-            if "result" in title.lower():
-                collection_name = "results"
-            elif "admit card" in title.lower() or "status" in title.lower():
-                collection_name = "admitCards"
-            elif "notice" in title.lower() or "recruitment" in title.lower() or "advertisement" in title.lower():
-                 collection_name = "jobs"
-            else:
-                continue # Skip items that are not jobs, results, or admit cards
 
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
             existing_item_query = items_ref.where("title", "==", title).limit(1).get()
             
             if len(existing_item_query) > 0:
-                print(f"SSC Item '{title}' already exists. Skipping.")
+                print(f"{collection_name[:-1].capitalize()} '{title}' already exists. Skipping.")
                 continue
 
-            print(f"Processing new SSC {collection_name[:-1]}: {title}")
+            print(f"Processing new {collection_name[:-1]}: {title}")
 
             item_data = {
                 "title": title,
-                "url": url, # This is the primary link (e.g., to the PDF)
-                "postedDate": datetime.now().strftime("%Y-%m-%d"),
-                "organization": "Staff Selection Commission (SSC)"
+                "url": url,
+                "postedDate": datetime.now().strftime("%Y-%m-%d")
             }
-
-            if collection_name == 'jobs':
-                 # For SSC, the notice IS the main content. We can use the title as the notification text for AI processing.
-                notification_text = title 
-                prompt = f"""
-                Analyze the following job title and extract key details.
-                - "title": "{title}"
-                - "organization": "Staff Selection Commission (SSC)"
-                - "vacancies": "Not Specified in title"
-                - "postedDate": "{datetime.now().strftime('%Y-%m-%d')}"
-                - "lastDate": "Please see notification PDF"
-                - "education": "Please see notification PDF"
-                - "notificationText": "{title}"
-                """
-                structured_data = call_gemini_api_for_job_details(prompt, title)
-                if structured_data:
-                    item_data.update(structured_data)
-                    item_data["applicationUrl"] = url # Often the notice page has the apply link
-                    item_data["notificationPdfUrl"] = url
             
+            # If it's a job, we need to get more details
+            if collection_name == 'jobs':
+                try:
+                    job_page = requests.get(url, headers=headers, timeout=30)
+                    job_page.raise_for_status()
+                    job_soup = BeautifulSoup(job_page.content, "html.parser")
+                    
+                    content_div = job_soup.find("div", id="post")
+                    if content_div:
+                        notification_text = content_div.get_text(separator="\n", strip=True)
+                    else:
+                        notification_text = job_soup.get_text(separator="\n", strip=True)
+                        print("Could not find content div on job page, using all page text as a fallback.")
+
+                    
+                    prompt = f"""
+                    You are an expert government job notification analyst. Analyze the following text and extract the key information.
+                    Provide the output ONLY as a valid JSON object. Do not include any text before or after the JSON.
+
+                    The JSON object must have these exact keys:
+                    - "title": The official name of the recruitment or exam. Use the title: "{title}".
+                    - "organization": The name of the recruiting body (e.g., Staff Selection Commission).
+                    - "vacancies": The total number of posts as a string (e.g., "17,727", "Not Specified").
+                    - "postedDate": The application start date, in "YYYY-MM-DD" format.
+                    - "lastDate": The last date to apply, in "YYYY-MM-DD" format.
+                    - "education": A concise summary of the required qualification (e.g., "10+2 Intermediate", "Bachelor's Degree").
+                    - "notificationText": A detailed summary including age limits, application fees for different categories, the full selection process, and a syllabus outline.
+
+                    Here is the text to analyze:
+                    ---
+                    {notification_text}
+                    ---
+                    """
+
+                    structured_data = call_gemini_api_for_job_details(prompt, title)
+                    if structured_data:
+                        item_data.update(structured_data)
+                        item_data["applicationUrl"] = url
+                        item_data["notificationPdfUrl"] = url
+                    else:
+                        print(f"Failed to process job data for: {title}")
+                        continue # Skip if AI fails
+                except Exception as e:
+                    print(f"Could not process details for job '{title}': {e}")
+                    continue # Skip adding the job if details can't be processed
+
             items_ref.add(item_data)
-            print(f"Successfully added SSC {collection_name[:-1]}: {title}")
+            print(f"Successfully added {collection_name[:-1]}: {title}")
             time.sleep(2)
 
     except Exception as e:
-        print(f"An error occurred while scraping SSC: {e}")
-
+        print(f"An error occurred while scraping section {section_id}: {e}")
 
 def main():
     """Main function to run the scraper."""
     db = initialize_firebase()
     if db:
         app_id = os.environ.get('FIREBASE_PROJECT_ID', 'my-job-porta')
-        scrape_ssc(db, app_id)
-        # In the future, you would add more functions like scrape_upsc(db, app_id) here.
+        scrape_section(db, app_id, "latestjob", "jobs")
+        scrape_section(db, app_id, "result", "results")
+        scrape_section(db, app_id, "admit-card", "admitCards")
     else:
         print("Could not connect to Firebase. Exiting.")
 
