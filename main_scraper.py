@@ -112,28 +112,18 @@ def find_main_content(soup):
     content_div = soup.find("main")
     if content_div:
         return content_div
-
-    # 4. Fallback: Look for common class names used for content
-    common_classes = ['content', 'entry-content', 'post-content', 'main-content']
-    for class_name in common_classes:
-        content_div = soup.find("div", class_=class_name)
-        if content_div:
-            return content_div
             
-    # 5. If all else fails, return the whole body, it's better than nothing
+    # 4. If all else fails, return the whole body, it's better than nothing
     return soup.find("body")
 
 
 def scrape_section(db, app_id, section_id, collection_name):
     """
-    Scrapes a specific section with intelligent filtering and robust content finding.
+    Scrapes a specific section with intelligent, time-based duplicate filtering.
     """
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
     print("-" * 50)
     print(f"Scraping {URL} for new {collection_name}...")
-    
-    # Define the cutoff date: 2 months (approx 60 days) ago from today
-    cutoff_date = datetime.now() - timedelta(days=60)
     
     section_keywords = {
         "jobs": {
@@ -187,35 +177,22 @@ def scrape_section(db, app_id, section_id, collection_name):
             if not title or not url:
                 continue
 
-            # --- NEW: Date Filtering Logic for Results and Admit Cards ---
-            if collection_name in ["results", "admitCards"]:
-                # Try to find a date in the title (e.g., "Result 2024", "Exam Date 25/05/2025")
-                match = re.search(r'(\d{1,2}\s+\w+\s+\d{4})|(\d{4})', title)
-                if match:
-                    try:
-                        date_str = match.group(0)
-                        # Handle year-only case
-                        if len(date_str) == 4:
-                            item_date = datetime.strptime(date_str, '%Y')
-                        else: # Handle full date case
-                            item_date = datetime.strptime(date_str, '%d %B %Y')
-                        
-                        # If the extracted date is older than our cutoff, skip it
-                        if item_date < cutoff_date:
-                            # print(f"Skipping old item: '{title}' (Date: {item_date.date()})")
-                            continue
-                    except ValueError:
-                        # If date parsing fails, process it to be safe
-                        pass
-
             base_title = get_base_title(title)
             if not base_title: 
                 continue
 
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
-            existing_item_query = items_ref.where("baseTitle", "==", base_title).limit(1).get()
+            
+            # --- NEW: Time-based duplicate check ---
+            # Define the cutoff date: 2 months (approx 60 days) ago from today
+            cutoff_date = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+            
+            # Query for items with the same base title posted within the last 60 days.
+            # This requires a composite index in Firestore. The error log will provide a link to create it.
+            existing_item_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
             
             if len(existing_item_query) > 0:
+                # print(f"Skipping recent duplicate: {title}") # Uncomment for debugging
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
@@ -244,6 +221,9 @@ def scrape_section(db, app_id, section_id, collection_name):
                 structured_data = call_gemini_api(prompt)
 
                 if structured_data and isinstance(structured_data, dict):
+                    if "postedDate" not in structured_data:
+                        structured_data["postedDate"] = today_date
+                        
                     if collection_name == 'jobs':
                         structured_data["applicationUrl"] = url
                         structured_data["notificationPdfUrl"] = url
