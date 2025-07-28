@@ -44,7 +44,6 @@ def call_gemini_api(prompt):
     model = 'gemini-2.0-flash'
     api_url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
     
-    # NEW: Added generationConfig to force JSON output
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -64,7 +63,6 @@ def call_gemini_api(prompt):
             print("WARNING: Gemini API returned an empty response.")
             return None
 
-        # The response is now a clean JSON string, no need for complex cleaning
         return json.loads(text)
 
     except requests.exceptions.HTTPError as http_err:
@@ -86,24 +84,54 @@ def get_base_title(title):
     It cleans the title and sorts the words to handle different word orders.
     """
     title = title.lower()
-    # Remove common non-identifying words, years, and other noise
     title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4,}|posts?|\[|\]|admit card|result|answer key|marks|phase|advt|no\.|for', '', title)
-    # Remove any remaining standalone numbers (like post counts)
     title = re.sub(r'\b\d+\b', '', title)
-    # Split into words, sort them alphabetically, and join back together
-    # This makes "bsf constable" and "constable bsf" the same unique key
     words = sorted(filter(None, title.split()))
     return ' '.join(words)
 
+def find_main_content(soup):
+    """
+    Finds the main content container of a page using a series of fallbacks.
+    This is much more robust than relying on a single ID.
+    """
+    # 1. NEW: Try the specific class name found on the target website.
+    content_div = soup.find("div", class_="post-content-right")
+    if content_div:
+        return content_div
+
+    # 2. Fallback: Try the most specific and likely ID first
+    content_div = soup.find("div", id="post")
+    if content_div:
+        return content_div
+
+    # 3. Fallback: Look for common semantic HTML5 tags for main content
+    content_div = soup.find("article")
+    if content_div:
+        return content_div
+    
+    content_div = soup.find("main")
+    if content_div:
+        return content_div
+
+    # 4. Fallback: Look for common class names used for content
+    common_classes = ['content', 'entry-content', 'post-content', 'main-content']
+    for class_name in common_classes:
+        content_div = soup.find("div", class_=class_name)
+        if content_div:
+            return content_div
+            
+    # 5. If all else fails, return the whole body, it's better than nothing
+    return soup.find("body")
+
+
 def scrape_section(db, app_id, section_id, collection_name):
     """
-    Scrapes a specific section with intelligent filtering based on the section type.
+    Scrapes a specific section with intelligent filtering and robust content finding.
     """
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
     print("-" * 50)
     print(f"Scraping {URL} for new {collection_name}...")
     
-    # Refined keyword lists for more accurate filtering
     section_keywords = {
         "jobs": {
             "include": ["recruitment", "vacancy", "post", "apprentice", "form"],
@@ -157,15 +185,13 @@ def scrape_section(db, app_id, section_id, collection_name):
                 continue
 
             base_title = get_base_title(title)
-            if not base_title: # Skip if the title becomes empty after cleaning
+            if not base_title: 
                 continue
 
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
             existing_item_query = items_ref.where("baseTitle", "==", base_title).limit(1).get()
             
             if len(existing_item_query) > 0:
-                # This log helps understand why items are being skipped
-                # print(f"Skipping existing item: {title} (Base: {base_title})")
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
@@ -174,7 +200,9 @@ def scrape_section(db, app_id, section_id, collection_name):
                 job_page = requests.get(url, headers=headers, timeout=30)
                 job_page.raise_for_status()
                 job_soup = BeautifulSoup(job_page.content, "html.parser")
-                content_div = job_soup.find("div", id="post")
+                
+                # Use the new robust content finding function
+                content_div = find_main_content(job_soup)
                 notification_text = content_div.get_text(separator="\n", strip=True) if content_div else ""
 
                 if not notification_text:
@@ -183,7 +211,6 @@ def scrape_section(db, app_id, section_id, collection_name):
 
                 today_date = datetime.now().strftime('%Y-%m-%d')
                 prompt = ""
-                # Prompts are updated to be more direct for JSON output
                 if collection_name == 'jobs':
                     prompt = f"""Analyze the job notification text. Create a JSON object with keys: "title", "organization", "lastDate" (YYYY-MM-DD), "description" (one-sentence summary), and "notificationText" (detailed summary). Use this exact title: "{title}". Set "postedDate" to "{today_date}". Text: --- {notification_text} ---"""
                 elif collection_name == 'results':
