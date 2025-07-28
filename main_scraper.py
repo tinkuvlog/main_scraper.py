@@ -13,7 +13,7 @@ def initialize_firebase():
     try:
         service_account_key_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY_JSON')
         if not service_account_key_json:
-            print("Firebase service account key JSON not found in environment variables.")
+            print("ERROR: Firebase service account key JSON not found in environment variables.")
             return None
 
         service_account_info = json.loads(service_account_key_json)
@@ -24,12 +24,18 @@ def initialize_firebase():
             
         print("Firebase connection successful.")
         return firestore.client()
+    except json.JSONDecodeError:
+        print("ERROR: Failed to parse Firebase credentials. Ensure the environment variable is a valid JSON string.")
+        return None
     except Exception as e:
         print(f"An error occurred during Firebase initialization: {e}")
         return None
 
 def call_gemini_api(prompt):
-    """Calls the Gemini API to process the notification text."""
+    """
+    Calls the Gemini API to process text and returns a structured JSON object.
+    This version explicitly requests a JSON response for better reliability.
+    """
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         print("ERROR: GEMINI_API_KEY not found in environment variables.")
@@ -38,40 +44,86 @@ def call_gemini_api(prompt):
     model = 'gemini-2.0-flash'
     api_url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
     
+    # NEW: Added generationConfig to force JSON output
     payload = {
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": prompt}]
-        }]
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+        }
     }
     
     try:
-        response = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'})
+        response = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'}, timeout=60)
         response.raise_for_status()
+        
         result = response.json()
         
-        text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+        text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', None)
         
-        if text:
-            text = text.strip().replace('```json', '').replace('```', '').strip()
-        
+        if not text:
+            print("WARNING: Gemini API returned an empty response.")
+            return None
+
+        # The response is now a clean JSON string, no need for complex cleaning
         return json.loads(text)
+
+    except requests.exceptions.HTTPError as http_err:
+        if http_err.response.status_code == 429:
+            print("ERROR: Rate limit exceeded. The API is temporarily blocking requests.")
+        else:
+            print(f"An HTTP error occurred in call_gemini_api: {http_err}")
+        return None
+    except json.JSONDecodeError:
+        print("ERROR: Failed to decode JSON from Gemini API response. The response may not be in the expected format.")
+        return None
     except Exception as e:
-        print(f"An error occurred in call_gemini_api: {e}")
-    return None
+        print(f"An unexpected error occurred in call_gemini_api: {e}")
+        return None
 
 def get_base_title(title):
-    """Creates a simplified, unique identifier for a job title to prevent duplicates."""
+    """
+    Creates a robust, unique identifier for a post to prevent duplicates.
+    It cleans the title and sorts the words to handle different word orders.
+    """
     title = title.lower()
-    title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4}|posts|post|\[|\]', '', title)
-    title = ' '.join(title.split())
-    return title
+    # Remove common non-identifying words, years, and other noise
+    title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4,}|posts?|\[|\]|admit card|result|answer key|marks|phase|advt|no\.|for', '', title)
+    # Remove any remaining standalone numbers (like post counts)
+    title = re.sub(r'\b\d+\b', '', title)
+    # Split into words, sort them alphabetically, and join back together
+    # This makes "bsf constable" and "constable bsf" the same unique key
+    words = sorted(filter(None, title.split()))
+    return ' '.join(words)
 
 def scrape_section(db, app_id, section_id, collection_name):
-    """Scrapes a specific section (Latest Jobs, Results, Admit Cards) from the website."""
+    """
+    Scrapes a specific section with intelligent filtering based on the section type.
+    """
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
+    print("-" * 50)
     print(f"Scraping {URL} for new {collection_name}...")
     
+    # Refined keyword lists for more accurate filtering
+    section_keywords = {
+        "jobs": {
+            "include": ["recruitment", "vacancy", "post", "apprentice", "form"],
+            "exclude": ["result", "admit card", "answer key", "marks", "yojana", "syllabus", "exam date"]
+        },
+        "results": {
+            "include": ["result", "marks", "score card", "final result", "cut off"],
+            "exclude": ["admit card", "recruitment", "apply", "notification", "exam date"]
+        },
+        "admitCards": {
+            "include": ["admit card", "exam date", "exam city", "status", "check"],
+            "exclude": ["result", "recruitment", "apply", "notification", "answer key", "final result"]
+        }
+    }
+
+    keywords = section_keywords.get(collection_name)
+    if not keywords:
+        print(f"WARNING: No keyword configuration for section '{collection_name}'. Skipping.")
+        return
+
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         page = requests.get(URL, headers=headers, timeout=30)
@@ -79,45 +131,41 @@ def scrape_section(db, app_id, section_id, collection_name):
         
         soup = BeautifulSoup(page.content, "html.parser")
         
-        all_lists = soup.find_all('ul')
-        item_links = []
-        
-        valid_keywords = ['recruitment', 'online', 'result', 'admit card', 'answer key', 'marks', 'admission', 'counseling']
-        ignore_keywords = ['home', 'jobs', 'yojana', 'contact us', 'privacy policy']
+        unique_links = set()
+        for link_tag in soup.find_all('a', href=True):
+            unique_links.add((link_tag.text.strip(), link_tag['href']))
 
-        for lst in all_lists:
-            links = lst.find_all('a')
-            for link in links:
-                href = link.get('href')
-                text = link.text.strip().lower()
-                
-                if href and any(keyword in text for keyword in valid_keywords) and not any(keyword in text for keyword in ignore_keywords):
-                     item_links.append(link)
+        item_links = []
+        for text, href in unique_links:
+            lower_text = text.lower()
+            if any(key in lower_text for key in keywords["include"]) and not any(key in lower_text for key in keywords["exclude"]):
+                item_links.append((text, href))
 
         if not item_links:
-            print(f"Could not find any potential links in section '{section_id}'.")
+            print(f"Could not find any new potential links in section '{section_id}'.")
             return
 
-        print(f"Found {len(item_links)} total links. Processing the top 10 new items.")
+        print(f"Found {len(item_links)} potential new items. Checking against database...")
 
         processed_count = 0
-        for link in item_links:
-            if processed_count >= 10:
-                print("Processed 10 new items for this section. Stopping to avoid rate limits.")
+        for title, url in item_links:
+            if processed_count >= 5:
+                print("Processed 5 new items. Stopping to conserve API quota for this section.")
                 break
-
-            title = link.text.strip()
-            url = link.get("href")
 
             if not title or not url:
                 continue
 
             base_title = get_base_title(title)
+            if not base_title: # Skip if the title becomes empty after cleaning
+                continue
+
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
             existing_item_query = items_ref.where("baseTitle", "==", base_title).limit(1).get()
             
             if len(existing_item_query) > 0:
-                # This item already exists, so we don't count it towards our new item limit
+                # This log helps understand why items are being skipped
+                # print(f"Skipping existing item: {title} (Base: {base_title})")
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
@@ -129,45 +177,64 @@ def scrape_section(db, app_id, section_id, collection_name):
                 content_div = job_soup.find("div", id="post")
                 notification_text = content_div.get_text(separator="\n", strip=True) if content_div else ""
 
+                if not notification_text:
+                    print(f"WARNING: Could not find content for '{title}'. Skipping.")
+                    continue
+
+                today_date = datetime.now().strftime('%Y-%m-%d')
                 prompt = ""
+                # Prompts are updated to be more direct for JSON output
                 if collection_name == 'jobs':
-                    prompt = f"""Analyze the text for a job notification. Extract details as a JSON object with keys: "title", "organization", "vacancies", "postedDate" (YYYY-MM-DD), "lastDate" (YYYY-MM-DD), "education", "description" (a one-sentence summary), "notificationText". Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the job notification text. Create a JSON object with keys: "title", "organization", "lastDate" (YYYY-MM-DD), "description" (one-sentence summary), and "notificationText" (detailed summary). Use this exact title: "{title}". Set "postedDate" to "{today_date}". Text: --- {notification_text} ---"""
                 elif collection_name == 'results':
-                    prompt = f"""Analyze the text for a result notification. Extract details as a JSON object with keys: "title", "organization", "postedDate" (Result Date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the result notification text. Create a JSON object with keys: "title", "organization". Use this exact title: "{title}". Set "postedDate" (result date) to "{today_date}". Text: --- {notification_text} ---"""
                 elif collection_name == 'admitCards':
-                    prompt = f"""Analyze the text for an admit card notification. Extract details as a JSON object with keys: "title", "organization", "lastDate" (Exam Date, in YYYY-MM-DD format), "postedDate" (Admit Card release date, in YYYY-MM-DD format). Use this title: "{title}". Text: --- {notification_text} ---"""
+                    prompt = f"""Analyze the admit card text. Create a JSON object with keys: "title", "organization", "lastDate" (exam date, YYYY-MM-DD). Use this exact title: "{title}". Set "postedDate" (admit card release date) to "{today_date}". Text: --- {notification_text} ---"""
 
                 structured_data = call_gemini_api(prompt)
 
-                if structured_data:
-                    structured_data["url"] = url
-                    structured_data["baseTitle"] = base_title
+                if structured_data and isinstance(structured_data, dict):
                     if collection_name == 'jobs':
                         structured_data["applicationUrl"] = url
                         structured_data["notificationPdfUrl"] = url
+                    else:
+                        structured_data["url"] = url
+                    
+                    structured_data["baseTitle"] = base_title
                     
                     items_ref.add(structured_data)
-                    print(f"Successfully added {collection_name[:-1]}: {title}")
+                    print(f"SUCCESS: Added '{title}' to Firestore.")
                     processed_count += 1
                 else:
-                    print(f"Failed to process data for: {title}")
+                    print(f"FAILED: Could not get valid structured data for '{title}'.")
 
             except Exception as e:
-                print(f"Could not process details for '{title}': {e}")
+                print(f"ERROR: Could not process details for '{title}': {e}")
             
-            time.sleep(10) # Increased delay to 10 seconds to be safe
+            print("Waiting for 15 seconds before next item...")
+            time.sleep(15)
 
     except Exception as e:
-        print(f"An error occurred while scraping section {section_id}: {e}")
+        print(f"An unrecoverable error occurred while scraping section {section_id}: {e}")
 
 def main():
-    """Main function to run the scraper."""
+    """Main function to run the scraper for all sections."""
     db = initialize_firebase()
     if db:
         app_id = os.environ.get('FIREBASE_PROJECT_ID', 'my-job-porta')
+        
         scrape_section(db, app_id, "latestjob", "jobs")
+        print("\nWaiting for 30 seconds before scraping next section...\n")
+        time.sleep(30)
+        
         scrape_section(db, app_id, "result", "results")
+        print("\nWaiting for 30 seconds before scraping next section...\n")
+        time.sleep(30)
+        
         scrape_section(db, app_id, "admit-card", "admitCards")
+        
+        print("-" * 50)
+        print("Scraping run finished.")
     else:
         print("Could not connect to Firebase. Exiting.")
 
