@@ -34,7 +34,7 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        #modalBody h3 { font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-top: 1.25rem; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e5e7eb; }
+        #modalBody h3, .search-results-container h3 { font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-top: 1.25rem; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e5e7eb; }
         #modalBody ul { list-style-type: none; padding-left: 0; margin-top: 0.5rem; }
         #modalBody li { position: relative; padding-left: 1.5rem; margin-bottom: 0.5rem; }
         #modalBody li::before { content: '✓'; position: absolute; left: 0; color: #4f46e5; font-weight: 700; }
@@ -60,15 +60,21 @@
 <body class="bg-gray-100 text-gray-800">
 
     <header class="bg-white shadow-md sticky top-0 z-20">
-        <nav class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-2">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center gap-4">
+            <div class="flex items-center space-x-2 flex-shrink-0">
                 <i class="fas fa-briefcase text-2xl text-indigo-600"></i>
                 <h1 class="text-xl md:text-2xl font-bold text-gray-900">Sarkari Naukri Finder</h1>
+            </div>
+            <!-- Search Bar -->
+            <div class="relative w-full max-w-lg">
+                <input type="text" id="searchInput" placeholder="Search for jobs, results, admit cards..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
             </div>
         </nav>
     </header>
 
-    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+    <!-- Main Content View (Tabs) -->
+    <main id="main-content-view" class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
         <section class="text-center mb-12">
             <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">Latest Jobs, Results & Admit Cards</h2>
             <p class="text-lg text-gray-600 max-w-3xl mx-auto">Your one-stop portal for all government exam updates.</p>
@@ -106,6 +112,12 @@
         </div>
     </main>
 
+    <!-- Search Results View -->
+    <div id="search-results-view" class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 hidden">
+        <!-- Search results will be injected here -->
+    </div>
+
+
     <footer class="bg-gray-800 text-white mt-12">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
             <p>&copy; 2025 Sarkari Naukri Finder. All Rights Reserved.</p>
@@ -113,6 +125,7 @@
         </div>
     </footer>
 
+    <!-- Modal for Job Details -->
     <div id="aiModal" class="fixed inset-0 bg-black bg-opacity-50 modal-backdrop flex items-center justify-center p-4 z-30 hidden">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col modal-content">
             <div class="p-4 border-b flex justify-between items-center">
@@ -125,30 +138,41 @@
     </div>
 
     <script type="module">
+        // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, updateDoc, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, updateDoc, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // DOM Elements
         const aiModal = document.getElementById('aiModal');
         const closeModalBtn = document.getElementById('closeModalBtn');
         const modalBody = document.getElementById('modalBody');
         const modalFooter = document.getElementById('modalFooter');
         const aiModalTitle = document.getElementById('aiModalTitle');
         const tabNav = document.getElementById('tab-nav');
+        const searchInput = document.getElementById('searchInput');
+        const mainContentView = document.getElementById('main-content-view');
+        const searchResultsView = document.getElementById('search-results-view');
 
+
+        // App State
         let db;
         let allData = { jobs: [], results: [], admitCards: [] };
         let currentPage = { jobs: 1, results: 1, admitCards: 1 };
         const itemsPerPage = 16;
-        let appId = 'my-job-porta';
+        let appId = 'my-job-porta'; // Default, will be replaced by config
 
+        /**
+         * Initializes the Firebase app and sets up authentication.
+         */
         async function setupApp() {
             try {
+                // IMPORTANT: Replace with your actual Firebase configuration
                 const firebaseConfig = {
                     apiKey: "AIzaSyBmJN7DL7d8G1ByqPKdzIBpNZxSp4-0VrI",
                     authDomain: "my-job-porta.firebaseapp.com",
                     projectId: "my-job-porta",
-                    storageBucket: "my-job-porta.firebasestorage.app",
+                    storageBucket: "my-job-porta.appspot.com",
                     messagingSenderId: "246539623451",
                     appId: "1:246539623451:web:483fd691916b7ba6a7ecbe",
                     measurementId: "G-9S4CR1KR5Q"
@@ -157,48 +181,62 @@
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 const auth = getAuth(app);
+                
                 await signInAnonymously(auth);
                 onAuthStateChanged(auth, user => {
                     if (user) {
-                        fetchAllData();
+                        console.log("Firebase connected. User authenticated.");
+                        setupRealtimeListeners();
                     }
                 });
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
+                document.body.innerHTML = '<div class="text-center p-8 text-red-600">Could not connect to the database. Please check the console for errors.</div>';
             }
         }
         
-        async function fetchAllData() {
-            try {
-                const types = ['jobs', 'results', 'admitCards'];
-                for (const type of types) {
-                    const q = query(collection(db, `artifacts/${appId}/public/data/${type}`), orderBy("postedDate", "desc"));
-                    const querySnapshot = await getDocs(q);
+        /**
+         * Sets up real-time listeners for all content types.
+         */
+        function setupRealtimeListeners() {
+            const types = ['jobs', 'results', 'admitCards'];
+            types.forEach(type => {
+                const q = query(collection(db, `artifacts/${appId}/public/data/${type}`), orderBy("postedDate", "desc"));
+                
+                onSnapshot(q, (querySnapshot) => {
+                    console.log(`Received update for ${type}`);
                     allData[type] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                }
-                renderContent('jobs'); 
-                renderContent('results');
-                renderContent('admitCards');
-            } catch (error) {
-                console.error("Error fetching data:", error);
-            }
+                    const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+                    if (activeTab === type) {
+                         renderContent(type);
+                    }
+                }, (error) => {
+                    console.error(`Error fetching real-time ${type}:`, error);
+                });
+            });
+            renderContent('jobs');
         }
 
+
+        /**
+         * Renders content for a specific tab (jobs, results, etc.).
+         * @param {string} type - The content type to render ('jobs', 'results', 'admitCards').
+         */
         function renderContent(type) {
             const container = document.getElementById(`${type}-container`);
             const paginationContainer = document.getElementById(`${type}-pagination-container`);
             if (!container || !paginationContainer) return;
 
             let dataToRender = allData[type];
+            
             if (type === 'jobs') {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0); 
                 dataToRender = allData.jobs.filter(job => {
-                    const postDate = new Date(job.postedDate);
+                    if (!job.postedDate || !job.lastDate) return false;
                     const lastDate = new Date(job.lastDate);
-                    postDate.setHours(0,0,0,0);
                     lastDate.setHours(0,0,0,0);
-                    return postDate <= today && lastDate >= today;
+                    return lastDate >= today;
                 });
             }
             
@@ -218,6 +256,9 @@
             renderPagination(type, totalPages);
         }
         
+        /**
+         * Renders the pagination buttons for a content type.
+         */
         function renderPagination(type, totalPages) {
             const paginationContainer = document.getElementById(`${type}-pagination-container`);
             if (!paginationContainer) return;
@@ -227,19 +268,12 @@
             }
 
             let paginationHtml = '<nav class="flex items-center justify-center gap-2">';
-            const maxPagesToShow = 7;
-            let startPage = Math.max(1, currentPage[type] - Math.floor(maxPagesToShow / 2));
-            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-
-            if (endPage - startPage + 1 < maxPagesToShow) {
-                startPage = Math.max(1, endPage - maxPagesToShow + 1);
-            }
-
+            
             if (currentPage[type] > 1) {
                 paginationHtml += `<button data-page="${currentPage[type] - 1}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md">&laquo;</button>`;
             }
 
-            for (let i = startPage; i <= endPage; i++) {
+            for (let i = 1; i <= totalPages; i++) {
                 paginationHtml += `<button data-page="${i}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md ${i === currentPage[type] ? 'active' : ''}">${i}</button>`;
             }
 
@@ -251,10 +285,17 @@
             paginationContainer.innerHTML = paginationHtml;
         }
 
+        /**
+         * Sanitizes text to prevent basic HTML injection issues.
+         */
         function sanitizeText(text) {
             if (!text) return '';
-            return text.replace(/`/g, "'").replace(/\r/g, '');
+            const element = document.createElement('div');
+            element.innerText = text;
+            return element.innerHTML;
         }
+
+        // --- Card Creation Functions ---
 
         function createJobCard(job) {
             const lastDate = new Date(job.lastDate);
@@ -279,7 +320,7 @@
                     <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
                     <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
                     <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Result Date:</strong> ${formattedDate}</div>
-                    <a href="${item.url}" target="_blank" class="block w-full text-center bg-green-500 text-white font-semibold py-2 rounded-lg hover:bg-green-600 transition-colors text-sm mt-auto">Download Result</a>
+                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-green-500 text-white font-semibold py-2 rounded-lg hover:bg-green-600 transition-colors text-sm mt-auto">Download Result</a>
                 </div>`;
         }
 
@@ -291,12 +332,79 @@
                     <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
                     <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
                     <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Exam Date:</strong> ${formattedDate}</div>
-                    <a href="${item.url}" target="_blank" class="block w-full text-center bg-red-500 text-white font-semibold py-2 rounded-lg hover:bg-red-600 transition-colors text-sm mt-auto">Download Admit Card</a>
+                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-red-500 text-white font-semibold py-2 rounded-lg hover:bg-red-600 transition-colors text-sm mt-auto">Download Admit Card</a>
                 </div>`;
         }
         
+        // --- Search Logic ---
+
+        function performSearch() {
+            const query = searchInput.value.trim().toLowerCase();
+
+            if (!query) {
+                clearSearch();
+                return;
+            }
+
+            mainContentView.classList.add('hidden');
+            searchResultsView.classList.remove('hidden');
+
+            const jobResults = allData.jobs.filter(item => 
+                (item.title && item.title.toLowerCase().includes(query)) || 
+                (item.organization && item.organization.toLowerCase().includes(query))
+            );
+            const resultResults = allData.results.filter(item => 
+                (item.title && item.title.toLowerCase().includes(query)) || 
+                (item.organization && item.organization.toLowerCase().includes(query))
+            );
+            const admitCardResults = allData.admitCards.filter(item => 
+                (item.title && item.title.toLowerCase().includes(query)) || 
+                (item.organization && item.organization.toLowerCase().includes(query))
+            );
+
+            let resultsHtml = `
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl md:text-3xl font-bold">Search Results for "${sanitizeText(query)}"</h2>
+                    <button id="clear-search-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Clear Search</button>
+                </div>
+            `;
+
+            if (jobResults.length === 0 && resultResults.length === 0 && admitCardResults.length === 0) {
+                resultsHtml += '<p class="text-center text-gray-600">No results found.</p>';
+            } else {
+                resultsHtml += '<div class="search-results-container space-y-12">';
+                if (jobResults.length > 0) {
+                    resultsHtml += '<div><h3>Matching Jobs</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
+                    jobResults.forEach(item => resultsHtml += createJobCard(item));
+                    resultsHtml += '</div></div>';
+                }
+                if (resultResults.length > 0) {
+                    resultsHtml += '<div><h3>Matching Results</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
+                    resultResults.forEach(item => resultsHtml += createResultCard(item));
+                    resultsHtml += '</div></div>';
+                }
+                if (admitCardResults.length > 0) {
+                    resultsHtml += '<div><h3>Matching Admit Cards</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
+                    admitCardResults.forEach(item => resultsHtml += createAdmitCardCard(item));
+                    resultsHtml += '</div></div>';
+                }
+                resultsHtml += '</div>';
+            }
+            
+            searchResultsView.innerHTML = resultsHtml;
+        }
+
+        function clearSearch() {
+            searchInput.value = '';
+            searchResultsView.classList.add('hidden');
+            mainContentView.classList.remove('hidden');
+            searchResultsView.innerHTML = '';
+        }
+
+        // --- Modal and AI Logic ---
+
         async function callGeminiAPI(prompt) {
-            const apiKey = ""; // Leave empty
+            const apiKey = ""; // API key is handled by the environment, leave empty.
             const model = 'gemini-2.0-flash';
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
@@ -307,12 +415,12 @@
                 return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
             } catch (error) {
                 console.error("Gemini API error:", error);
-                return null;
+                return "Could not load details from AI. Please try again later.";
             }
         }
 
         function showModal(title, bodyContent, footerContent = '') {
-            aiModalTitle.innerHTML = title;
+            aiModalTitle.innerHTML = sanitizeText(title);
             modalBody.innerHTML = bodyContent;
             modalFooter.innerHTML = footerContent;
             aiModal.classList.remove('hidden');
@@ -334,21 +442,21 @@
             const job = allData.jobs.find(j => j.id === jobId);
             if (!job) return;
             const footerLinks = `<div class="flex flex-col sm:flex-row justify-center gap-4">
-                    <a href="${job.applicationUrl}" target="_blank" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700">Apply Online</a>
-                    <a href="${job.notificationPdfUrl}" target="_blank" class="bg-gray-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-gray-800">Download Notification</a>
+                    <a href="${job.applicationUrl}" target="_blank" rel="noopener noreferrer" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 text-center">Apply Online</a>
+                    <a href="${job.notificationPdfUrl}" target="_blank" rel="noopener noreferrer" class="bg-gray-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-gray-800 text-center">Download Notification</a>
                 </div>`;
 
             if (job.detailedSummary) {
                 showModal(`Details for ${job.title}`, formatForDisplay(job.detailedSummary), footerLinks);
                 return;
             }
-            showModal(`Details for ${job.title}`, `<div class="flex items-center justify-center p-8"><div class="btn-spinner" style="width: 40px; height: 40px;"></div><p class="ml-4">Loading details...</p></div>`, '');
-            const prompt = `You are an expert at parsing Indian government job notifications. From the text below, extract and structure the information into Markdown. Text: --- ${sanitizeText(job.notificationText)} ---`;
+            showModal(`Details for ${job.title}`, `<div class="flex items-center justify-center p-8"><div class="btn-spinner" style="width: 40px; height: 40px;"></div><p class="ml-4">Loading details with AI...</p></div>`, '');
+            const prompt = `You are an expert at parsing Indian government job notifications. From the text below, extract and structure the information into clean Markdown. Focus on eligibility, important dates, application fees, and vacancy details. Text: --- ${job.notificationText} ---`;
             const details = await callGeminiAPI(prompt);
             try {
                 const jobRef = doc(db, `artifacts/${appId}/public/data/jobs`, job.id);
                 await updateDoc(jobRef, { detailedSummary: details });
-                job.detailedSummary = details;
+                job.detailedSummary = details; // Cache in local state
             } catch (error) {
                 console.error("Error caching details:", error);
             }
@@ -366,6 +474,22 @@
              const detailsButton = e.target.closest('.details-btn');
             if(detailsButton) {
                 handleDetailsClick(detailsButton.dataset.jobid);
+            }
+            if (e.target.id === 'clear-search-btn') {
+                clearSearch();
+            }
+        });
+        
+        searchInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Also search when user clears the input
+        searchInput.addEventListener('input', () => {
+            if (searchInput.value.trim() === '') {
+                clearSearch();
             }
         });
         
@@ -385,10 +509,12 @@
                 content.classList.add('hidden');
             });
             document.getElementById(`${tab}-content`).classList.remove('hidden');
+            renderContent(tab);
         });
 
         closeModalBtn.addEventListener('click', () => aiModal.classList.add('hidden'));
         aiModal.addEventListener('click', (e) => { if (e.target === aiModal) aiModal.classList.add('hidden'); });
+        
         window.addEventListener('load', setupApp);
     </script>
 </body>
