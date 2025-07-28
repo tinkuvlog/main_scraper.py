@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 def initialize_firebase():
@@ -94,7 +94,7 @@ def find_main_content(soup):
     Finds the main content container of a page using a series of fallbacks.
     This is much more robust than relying on a single ID.
     """
-    # 1. NEW: Try the specific class name found on the target website.
+    # 1. Try the specific class name found on the target website.
     content_div = soup.find("div", class_="post-content-right")
     if content_div:
         return content_div
@@ -131,6 +131,9 @@ def scrape_section(db, app_id, section_id, collection_name):
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
     print("-" * 50)
     print(f"Scraping {URL} for new {collection_name}...")
+    
+    # Define the cutoff date: 2 months (approx 60 days) ago from today
+    cutoff_date = datetime.now() - timedelta(days=60)
     
     section_keywords = {
         "jobs": {
@@ -184,6 +187,27 @@ def scrape_section(db, app_id, section_id, collection_name):
             if not title or not url:
                 continue
 
+            # --- NEW: Date Filtering Logic for Results and Admit Cards ---
+            if collection_name in ["results", "admitCards"]:
+                # Try to find a date in the title (e.g., "Result 2024", "Exam Date 25/05/2025")
+                match = re.search(r'(\d{1,2}\s+\w+\s+\d{4})|(\d{4})', title)
+                if match:
+                    try:
+                        date_str = match.group(0)
+                        # Handle year-only case
+                        if len(date_str) == 4:
+                            item_date = datetime.strptime(date_str, '%Y')
+                        else: # Handle full date case
+                            item_date = datetime.strptime(date_str, '%d %B %Y')
+                        
+                        # If the extracted date is older than our cutoff, skip it
+                        if item_date < cutoff_date:
+                            # print(f"Skipping old item: '{title}' (Date: {item_date.date()})")
+                            continue
+                    except ValueError:
+                        # If date parsing fails, process it to be safe
+                        pass
+
             base_title = get_base_title(title)
             if not base_title: 
                 continue
@@ -201,7 +225,6 @@ def scrape_section(db, app_id, section_id, collection_name):
                 job_page.raise_for_status()
                 job_soup = BeautifulSoup(job_page.content, "html.parser")
                 
-                # Use the new robust content finding function
                 content_div = find_main_content(job_soup)
                 notification_text = content_div.get_text(separator="\n", strip=True) if content_div else ""
 
