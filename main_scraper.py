@@ -33,8 +33,7 @@ def initialize_firebase():
 
 def call_gemini_api(prompt):
     """
-    Calls the Gemini API to process text and returns a structured JSON object.
-    This version explicitly requests a JSON response for better reliability.
+    Calls the Gemini API with a retry mechanism for temporary server errors.
     """
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
@@ -51,32 +50,47 @@ def call_gemini_api(prompt):
         }
     }
     
-    try:
-        response = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'}, timeout=60)
-        response.raise_for_status()
-        
-        result = response.json()
-        
-        text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', None)
-        
-        if not text:
-            print("WARNING: Gemini API returned an empty response.")
-            return None
+    # --- NEW: Retry Logic ---
+    max_retries = 3
+    base_delay = 5  # seconds
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'}, timeout=60)
+            
+            # Check for specific server-side errors to retry
+            if response.status_code in [500, 502, 503, 504]:
+                print(f"WARNING: Received server error {response.status_code}. Retrying in {base_delay * (attempt + 1)}s...")
+                time.sleep(base_delay * (attempt + 1)) # Exponential backoff
+                continue
 
-        return json.loads(text)
+            # Raise exceptions for other client-side errors (like 4xx) immediately
+            response.raise_for_status()
+            
+            result = response.json()
+            text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', None)
+            
+            if not text:
+                print("WARNING: Gemini API returned an empty response.")
+                return None
 
-    except requests.exceptions.HTTPError as http_err:
-        if http_err.response.status_code == 429:
-            print("ERROR: Rate limit exceeded. The API is temporarily blocking requests.")
-        else:
-            print(f"An HTTP error occurred in call_gemini_api: {http_err}")
-        return None
-    except json.JSONDecodeError:
-        print("ERROR: Failed to decode JSON from Gemini API response. The response may not be in the expected format.")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred in call_gemini_api: {e}")
-        return None
+            return json.loads(text)
+
+        except requests.exceptions.RequestException as e:
+            print(f"A network error occurred on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(base_delay * (attempt + 1))
+            else:
+                print("Max retries reached. Giving up.")
+                return None
+        except json.JSONDecodeError:
+            print("ERROR: Failed to decode JSON from Gemini API response.")
+            return None # Do not retry on bad JSON, it's a permanent error
+        except Exception as e:
+            print(f"An unexpected error occurred in call_gemini_api: {e}")
+            return None # Do not retry on other unexpected errors
+
+    return None # Return None if all retries fail
+
 
 def get_base_title(title):
     """
@@ -183,16 +197,11 @@ def scrape_section(db, app_id, section_id, collection_name):
 
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
             
-            # --- NEW: Time-based duplicate check ---
-            # Define the cutoff date: 2 months (approx 60 days) ago from today
             cutoff_date = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
             
-            # Query for items with the same base title posted within the last 60 days.
-            # This requires a composite index in Firestore. The error log will provide a link to create it.
             existing_item_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
             
             if len(existing_item_query) > 0:
-                # print(f"Skipping recent duplicate: {title}") # Uncomment for debugging
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
@@ -241,8 +250,9 @@ def scrape_section(db, app_id, section_id, collection_name):
             except Exception as e:
                 print(f"ERROR: Could not process details for '{title}': {e}")
             
-            print("Waiting for 15 seconds before next item...")
-            time.sleep(15)
+            # This delay is still important to be a good citizen on the web
+            print("Waiting for 5 seconds before next item...")
+            time.sleep(5)
 
     except Exception as e:
         print(f"An unrecoverable error occurred while scraping section {section_id}: {e}")
@@ -254,12 +264,12 @@ def main():
         app_id = os.environ.get('FIREBASE_PROJECT_ID', 'my-job-porta')
         
         scrape_section(db, app_id, "latestjob", "jobs")
-        print("\nWaiting for 30 seconds before scraping next section...\n")
-        time.sleep(30)
+        print("\nWaiting for 15 seconds before scraping next section...\n")
+        time.sleep(15)
         
         scrape_section(db, app_id, "result", "results")
-        print("\nWaiting for 30 seconds before scraping next section...\n")
-        time.sleep(30)
+        print("\nWaiting for 15 seconds before scraping next section...\n")
+        time.sleep(15)
         
         scrape_section(db, app_id, "admit-card", "admitCards")
         
