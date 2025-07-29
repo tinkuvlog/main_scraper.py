@@ -1,31 +1,47 @@
+# This is the name of the workflow, which will appear in the Actions tab of your GitHub repository.
 name: Run Job Scraper
 
 on:
-  workflow_dispatch: # Allows manual running
+  # This line allows you to run the workflow manually from the Actions tab.
+  workflow_dispatch:
+
+  # This section defines the schedule for automatic runs.
   schedule:
-    - cron: '0 0,12 * * *' # Runs at midnight and noon UTC
+    # UPDATED: This cron schedule is set to run at your custom times.
+    # It runs at 5:30, 7:30, 9:30, 10:30, 12:30, and 14:30 UTC, which corresponds to:
+    # 11:00 AM, 1:00 PM, 3:00 PM, 4:00 PM, 6:00 PM, and 8:00 PM in India Standard Time (IST).
+    - cron: '30 5,7,9,10,12,14 * * *'
 
 jobs:
+  # Defines a single job named "build" that will run the scraper.
   build:
+    # Specifies that the job will run on the latest version of Ubuntu Linux.
     runs-on: ubuntu-latest
 
+    # These are the sequential steps the job will perform.
     steps:
+      # Step 1: Checks out your repository's code so the job can access it.
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Step 2: Sets up the specified version of Python.
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
+      # Step 3: Installs the Python libraries your scraper needs to run.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install firebase-admin requests beautifulsoup4
 
+      # Step 4: Runs your Python scraper script.
       - name: Run Scraper
+        # This section securely passes your secret keys from GitHub Secrets to the script.
         env:
           FIREBASE_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY_JSON }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FIREBASE_PROJECT_ID: my-job-porta
+        # This is the command that executes your scraper.
         run: python main_scraper.py
