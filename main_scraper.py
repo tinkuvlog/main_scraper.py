@@ -84,14 +84,30 @@ def call_gemini_api(prompt):
 
 def get_base_title(title):
     """
-    Creates a highly restrictive, unique identifier for a post to prevent duplicates.
+    Creates the ultimate, highly restrictive, unique identifier for a post.
+    It aggressively cleans the title and sorts the remaining keywords alphabetically.
     """
     title = title.lower()
-    # More aggressive regex to remove noise words, years, and numbers
-    title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4,}|posts?|\[|\]|admit card|result|answer key|marks|phase|advt|no\.|for|various|post|of', '', title)
-    title = re.sub(r'\b\d+\b', '', title)
-    words = sorted(filter(None, title.split()))
+    # Expanded list of noise words to remove
+    noise_words = [
+        'recruitment', 'online', 'form', 'apply', 'vacancy', 'posts?', 'admit card', 
+        'result', 'answer key', 'marks', 'phase', 'advt', 'no', 'for', 'various', 
+        'post', 'of', 'and', 'in', 'new', 'latest', 'direct'
+    ]
+    # Create a regex pattern from the noise words
+    noise_pattern = r'\b(' + '|'.join(noise_words) + r')\b'
+    
+    # Remove noise words, all numbers, years, and special characters
+    title = re.sub(noise_pattern, '', title)
+    title = re.sub(r'\[|\]|\(|\)|\d+', '', title) # Removes brackets and all numbers
+    title = re.sub(r'[^a-z\s]', '', title) # Removes any remaining non-alphabetic characters
+    
+    # Split into words, sort them alphabetically, and join back
+    words = sorted(list(set(filter(None, title.split()))))
+    
+    # Return the canonical identifier
     return ' '.join(words)
+
 
 def find_main_content(soup):
     """
@@ -110,7 +126,7 @@ def find_main_content(soup):
 
 def scrape_section(db, app_id, section_id, collection_name):
     """
-    Scrapes a specific section with a highly restrictive two-step duplicate filter.
+    Scrapes a specific section using the ultimate duplicate filter.
     """
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
     print("-" * 50)
@@ -156,22 +172,19 @@ def scrape_section(db, app_id, section_id, collection_name):
 
             if not title or not url: continue
 
-            items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
-            
-            # --- UPDATED: Changed the time window for duplicate checks to 5 days ---
-            cutoff_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-            
-            # STEP 1: Check if the exact URL has been posted recently.
-            url_query = items_ref.where("sourceUrl", "==", url).where("postedDate", ">=", cutoff_date).limit(1).get()
-            if len(url_query) > 0:
+            # --- ULTIMATE DUPLICATE CHECK ---
+            base_title = get_base_title(title)
+            if not base_title: 
                 continue
 
-            # STEP 2: If URL is new, check the cleaned base title.
-            base_title = get_base_title(title)
-            if not base_title: continue
+            items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
+            # UPDATED: Changed the time window for duplicate checks to 30 days (1 month).
+            cutoff_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
             
-            title_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
-            if len(title_query) > 0:
+            # Simplified, more powerful query. This is the only check needed now.
+            existing_item_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
+            
+            if len(existing_item_query) > 0:
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
