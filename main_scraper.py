@@ -24,16 +24,13 @@ def initialize_firebase():
             
         print("Firebase connection successful.")
         return firestore.client()
-    except json.JSONDecodeError:
-        print("ERROR: Failed to parse Firebase credentials. Ensure the environment variable is a valid JSON string.")
-        return None
     except Exception as e:
         print(f"An error occurred during Firebase initialization: {e}")
         return None
 
 def call_gemini_api(prompt):
     """
-    Calls the Gemini API with a retry mechanism for temporary server errors.
+    Calls the Gemini API with a retry mechanism and forced JSON output.
     """
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
@@ -50,20 +47,17 @@ def call_gemini_api(prompt):
         }
     }
     
-    # --- NEW: Retry Logic ---
     max_retries = 3
-    base_delay = 5  # seconds
+    base_delay = 5
     for attempt in range(max_retries):
         try:
             response = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'}, timeout=60)
             
-            # Check for specific server-side errors to retry
             if response.status_code in [500, 502, 503, 504]:
                 print(f"WARNING: Received server error {response.status_code}. Retrying in {base_delay * (attempt + 1)}s...")
-                time.sleep(base_delay * (attempt + 1)) # Exponential backoff
+                time.sleep(base_delay * (attempt + 1))
                 continue
 
-            # Raise exceptions for other client-side errors (like 4xx) immediately
             response.raise_for_status()
             
             result = response.json()
@@ -82,23 +76,19 @@ def call_gemini_api(prompt):
             else:
                 print("Max retries reached. Giving up.")
                 return None
-        except json.JSONDecodeError:
-            print("ERROR: Failed to decode JSON from Gemini API response.")
-            return None # Do not retry on bad JSON, it's a permanent error
         except Exception as e:
             print(f"An unexpected error occurred in call_gemini_api: {e}")
-            return None # Do not retry on other unexpected errors
+            return None
 
-    return None # Return None if all retries fail
-
+    return None
 
 def get_base_title(title):
     """
-    Creates a robust, unique identifier for a post to prevent duplicates.
-    It cleans the title and sorts the words to handle different word orders.
+    Creates a highly restrictive, unique identifier for a post to prevent duplicates.
     """
     title = title.lower()
-    title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4,}|posts?|\[|\]|admit card|result|answer key|marks|phase|advt|no\.|for', '', title)
+    # More aggressive regex to remove noise words, years, and numbers
+    title = re.sub(r'recruitment|online form|apply online|vacancy|\d{4,}|posts?|\[|\]|admit card|result|answer key|marks|phase|advt|no\.|for|various|post|of', '', title)
     title = re.sub(r'\b\d+\b', '', title)
     words = sorted(filter(None, title.split()))
     return ' '.join(words)
@@ -106,58 +96,34 @@ def get_base_title(title):
 def find_main_content(soup):
     """
     Finds the main content container of a page using a series of fallbacks.
-    This is much more robust than relying on a single ID.
     """
-    # 1. Try the specific class name found on the target website.
     content_div = soup.find("div", class_="post-content-right")
-    if content_div:
-        return content_div
-
-    # 2. Fallback: Try the most specific and likely ID first
+    if content_div: return content_div
     content_div = soup.find("div", id="post")
-    if content_div:
-        return content_div
-
-    # 3. Fallback: Look for common semantic HTML5 tags for main content
+    if content_div: return content_div
     content_div = soup.find("article")
-    if content_div:
-        return content_div
-    
+    if content_div: return content_div
     content_div = soup.find("main")
-    if content_div:
-        return content_div
-            
-    # 4. If all else fails, return the whole body, it's better than nothing
+    if content_div: return content_div
     return soup.find("body")
 
 
 def scrape_section(db, app_id, section_id, collection_name):
     """
-    Scrapes a specific section with intelligent, time-based duplicate filtering.
+    Scrapes a specific section with a highly restrictive two-step duplicate filter.
     """
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
     print("-" * 50)
     print(f"Scraping {URL} for new {collection_name}...")
     
     section_keywords = {
-        "jobs": {
-            "include": ["recruitment", "vacancy", "post", "apprentice", "form"],
-            "exclude": ["result", "admit card", "answer key", "marks", "yojana", "syllabus", "exam date"]
-        },
-        "results": {
-            "include": ["result", "marks", "score card", "final result", "cut off"],
-            "exclude": ["admit card", "recruitment", "apply", "notification", "exam date"]
-        },
-        "admitCards": {
-            "include": ["admit card", "exam date", "exam city", "status", "check"],
-            "exclude": ["result", "recruitment", "apply", "notification", "answer key", "final result"]
-        }
+        "jobs": {"include": ["recruitment", "vacancy", "post", "apprentice", "form"], "exclude": ["result", "admit card", "answer key", "marks", "yojana", "syllabus", "exam date"]},
+        "results": {"include": ["result", "marks", "score card", "final result", "cut off"], "exclude": ["admit card", "recruitment", "apply", "notification", "exam date"]},
+        "admitCards": {"include": ["admit card", "exam date", "exam city", "status", "check"], "exclude": ["result", "recruitment", "apply", "notification", "answer key", "final result"]}
     }
 
     keywords = section_keywords.get(collection_name)
-    if not keywords:
-        print(f"WARNING: No keyword configuration for section '{collection_name}'. Skipping.")
-        return
+    if not keywords: return
 
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
@@ -188,20 +154,24 @@ def scrape_section(db, app_id, section_id, collection_name):
                 print("Processed 5 new items. Stopping to conserve API quota for this section.")
                 break
 
-            if not title or not url:
-                continue
-
-            base_title = get_base_title(title)
-            if not base_title: 
-                continue
+            if not title or not url: continue
 
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
             
-            cutoff_date = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+            # --- UPDATED: Changed the time window for duplicate checks to 5 days ---
+            cutoff_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
             
-            existing_item_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
+            # STEP 1: Check if the exact URL has been posted recently.
+            url_query = items_ref.where("sourceUrl", "==", url).where("postedDate", ">=", cutoff_date).limit(1).get()
+            if len(url_query) > 0:
+                continue
+
+            # STEP 2: If URL is new, check the cleaned base title.
+            base_title = get_base_title(title)
+            if not base_title: continue
             
-            if len(existing_item_query) > 0:
+            title_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
+            if len(title_query) > 0:
                 continue
 
             print(f"Processing new {collection_name[:-1]}: {title}")
@@ -230,16 +200,15 @@ def scrape_section(db, app_id, section_id, collection_name):
                 structured_data = call_gemini_api(prompt)
 
                 if structured_data and isinstance(structured_data, dict):
-                    if "postedDate" not in structured_data:
-                        structured_data["postedDate"] = today_date
-                        
+                    structured_data["postedDate"] = structured_data.get("postedDate", today_date)
+                    structured_data["baseTitle"] = base_title
+                    structured_data["sourceUrl"] = url 
+                    
                     if collection_name == 'jobs':
                         structured_data["applicationUrl"] = url
                         structured_data["notificationPdfUrl"] = url
                     else:
                         structured_data["url"] = url
-                    
-                    structured_data["baseTitle"] = base_title
                     
                     items_ref.add(structured_data)
                     print(f"SUCCESS: Added '{title}' to Firestore.")
@@ -250,7 +219,6 @@ def scrape_section(db, app_id, section_id, collection_name):
             except Exception as e:
                 print(f"ERROR: Could not process details for '{title}': {e}")
             
-            # This delay is still important to be a good citizen on the web
             print("Waiting for 5 seconds before next item...")
             time.sleep(5)
 
