@@ -3,19 +3,348 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Find the latest government jobs (Sarkari Naukri), exam results, and admit cards in one place. Your one-stop portal for all government exam updates in India.">
     <meta name="google-site-verification" content="0oAVM0y8FQSnvADxruxXAQC9UVdNuYDSdzFh-sbCSf0" />
     <title>Sarkari Naukri Finder - Latest Jobs, Results & Admit Cards</title>
+    
+    <!-- NEW: Updated favicon with the new Indian Flag logo icon -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M75,20 H25 C22.24,20 20,22.24 20,25 V75 C20,77.76 22.24,80 25,80 H75 C77.76,80 80,77.76 80,75 V25 C80,22.24 77.76,20 75,20 Z' fill='%23FFFFFF' stroke='%23e5e7eb' stroke-width='2'/%3E%3Crect x='20' y='20' width='60' height='12' fill='%23FF9933'/%3E%3Crect x='20' y='32' width='60' height='12' fill='%23FFFFFF'/%3E%3Crect x='20' y='44' width='60' height='12' fill='%23138808'/%3E%3Ccircle cx='50' cy='38' r='4' fill='%23000080'/%3E%3Cg transform='translate(50,38)'%3E%3Cpath d='M0 -3.5 L0 3.5 M-1.75 -3.03 L1.75 3.03 M-3.03 -1.75 L3.03 1.75 M-3.5 0 L3.5 0 M-3.03 1.75 L3.03 -1.75 M-1.75 3.03 L1.75 -3.03' stroke='%23000080' stroke-width='0.5'/%3E%3C/g%3E%3Ccircle cx='65' cy='65' r='18' fill='%23000080'/%3E%3Cpath d='M65,53 a12,12 0 1,0 0,24 a12,12 0 1,0 0,-24 M65,58 a7,7 0 1,1 0,14 a7,7 0 1,1 0,-14' fill='white'/%3E%3Cline x1='74' y1='74' x2='82' y2='82' stroke='%23000080' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+
+    <!-- Non-blocking Stylesheets -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
+
+    <!-- Non-blocking Scripts -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module" defer>
+        // Firebase Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, updateDoc, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // DOM Elements
+        const aiModal = document.getElementById('aiModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const modalBody = document.getElementById('modalBody');
+        const modalFooter = document.getElementById('modalFooter');
+        const aiModalTitle = document.getElementById('aiModalTitle');
+        const tabNav = document.getElementById('tab-nav');
+        const searchInput = document.getElementById('searchInput');
+        const mainContentView = document.getElementById('main-content-view');
+        const searchResultsView = document.getElementById('search-results-view');
+
+
+        // App State
+        let db;
+        let allData = { jobs: [], results: [], admitCards: [] };
+        let currentPage = { jobs: 1, results: 1, admitCards: 1 };
+        const itemsPerPage = 16;
+        let appId = 'my-job-porta'; // Default, will be replaced by config
+
+        async function setupApp() {
+            try {
+                const firebaseConfig = {
+                    apiKey: "AIzaSyBmJN7DL7d8G1ByqPKdzIBpNZxSp4-0VrI",
+                    authDomain: "my-job-porta.firebaseapp.com",
+                    projectId: "my-job-porta",
+                    storageBucket: "my-job-porta.appspot.com",
+                    messagingSenderId: "246539623451",
+                    appId: "1:246539623451:web:483fd691916b7ba6a7ecbe",
+                    measurementId: "G-9S4CR1KR5Q"
+                };
+                appId = firebaseConfig.projectId;
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                const auth = getAuth(app);
+                
+                await signInAnonymously(auth);
+                onAuthStateChanged(auth, user => {
+                    if (user) {
+                        console.log("Firebase connected. User authenticated.");
+                        setupRealtimeListeners();
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                document.body.innerHTML = '<div class="text-center p-8 text-red-600">Could not connect to the database. Please check the console for errors.</div>';
+            }
+        }
+        
+        function setupRealtimeListeners() {
+            const types = ['jobs', 'results', 'admitCards'];
+            types.forEach(type => {
+                const q = query(collection(db, `artifacts/${appId}/public/data/${type}`), orderBy("postedDate", "desc"));
+                
+                onSnapshot(q, (querySnapshot) => {
+                    console.log(`Received update for ${type}`);
+                    allData[type] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+                    if (activeTab === type) {
+                         renderContent(type);
+                    }
+                }, (error) => {
+                    console.error(`Error fetching real-time ${type}:`, error);
+                });
+            });
+            renderContent('jobs');
+        }
+
+        function renderContent(type) {
+            const container = document.getElementById(`${type}-container`);
+            const paginationContainer = document.getElementById(`${type}-pagination-container`);
+            if (!container || !paginationContainer) return;
+
+            let dataToRender = allData[type];
+            
+            if (type === 'jobs') {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); 
+                dataToRender = allData.jobs.filter(job => {
+                    if (!job.postedDate || !job.lastDate) return false;
+                    const lastDate = new Date(job.lastDate);
+                    lastDate.setHours(0,0,0,0);
+                    return lastDate >= today;
+                });
+            }
+            
+            const totalPages = Math.ceil(dataToRender.length / itemsPerPage);
+            const startIndex = (currentPage[type] - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const paginatedItems = dataToRender.slice(startIndex, endIndex);
+
+            let contentHtml = '';
+            paginatedItems.forEach(item => {
+                if (type === 'jobs') contentHtml += createJobCard(item);
+                else if (type === 'results') contentHtml += createResultCard(item);
+                else if (type === 'admitCards') contentHtml += createAdmitCardCard(item);
+            });
+            container.innerHTML = contentHtml || `<p class="text-gray-500 p-4 col-span-full">No new ${type} found.</p>`;
+
+            renderPagination(type, totalPages);
+        }
+        
+        function renderPagination(type, totalPages) {
+            const paginationContainer = document.getElementById(`${type}-pagination-container`);
+            if (!paginationContainer) return;
+            if (totalPages <= 1) {
+                paginationContainer.innerHTML = '';
+                return;
+            }
+
+            let paginationHtml = '<nav class="flex items-center justify-center gap-2">';
+            
+            if (currentPage[type] > 1) {
+                paginationHtml += `<button data-page="${currentPage[type] - 1}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md">&laquo;</button>`;
+            }
+
+            for (let i = 1; i <= totalPages; i++) {
+                paginationHtml += `<button data-page="${i}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md ${i === currentPage[type] ? 'active' : ''}">${i}</button>`;
+            }
+
+            if (currentPage[type] < totalPages) {
+                paginationHtml += `<button data-page="${currentPage[type] + 1}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md">&raquo;</button>`;
+            }
+
+            paginationHtml += '</nav>';
+            paginationContainer.innerHTML = paginationHtml;
+        }
+
+        function sanitizeText(text) {
+            if (!text) return '';
+            const element = document.createElement('div');
+            element.innerText = text;
+            return element.innerHTML;
+        }
+
+        function createJobCard(job) {
+            const lastDate = new Date(job.lastDate);
+            const formattedDate = lastDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            return `
+                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
+                    <h4 class="text-base font-bold text-gray-900">${sanitizeText(job.title)}</h4>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(job.organization)}</p>
+                    <p class="text-xs text-gray-600 mb-4 flex-grow">${sanitizeText(job.description || '')}</p>
+                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Last Date:</strong> ${formattedDate}</div>
+                    <div class="mt-auto pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2">
+                        <button data-jobid="${job.id}" class="details-btn flex-1 bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors text-sm">View Details</button>
+                    </div>
+                </div>`;
+        }
+
+        function createResultCard(item) {
+            const date = new Date(item.postedDate);
+            const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            return `
+                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
+                    <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
+                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Result Date:</strong> ${formattedDate}</div>
+                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-green-500 text-white font-semibold py-2 rounded-lg hover:bg-green-600 transition-colors text-sm mt-auto">Download Result</a>
+                </div>`;
+        }
+
+        function createAdmitCardCard(item) {
+            const date = new Date(item.lastDate); // Using lastDate for Exam Date
+            const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            return `
+                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
+                    <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
+                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Exam Date:</strong> ${formattedDate}</div>
+                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-red-500 text-white font-semibold py-2 rounded-lg hover:bg-red-600 transition-colors text-sm mt-auto">Download Admit Card</a>
+                </div>`;
+        }
+        
+        function performSearch() {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) { clearSearch(); return; }
+
+            mainContentView.classList.add('hidden');
+            searchResultsView.classList.remove('hidden');
+
+            const jobResults = allData.jobs.filter(item => (item.title && item.title.toLowerCase().includes(query)) || (item.organization && item.organization.toLowerCase().includes(query)));
+            const resultResults = allData.results.filter(item => (item.title && item.title.toLowerCase().includes(query)) || (item.organization && item.organization.toLowerCase().includes(query)));
+            const admitCardResults = allData.admitCards.filter(item => (item.title && item.title.toLowerCase().includes(query)) || (item.organization && item.organization.toLowerCase().includes(query)));
+
+            let resultsHtml = `<div class="flex justify-between items-center mb-8"><h2 class="text-2xl md:text-3xl font-bold">Search Results for "${sanitizeText(query)}"</h2><button id="clear-search-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Clear Search</button></div>`;
+
+            if (jobResults.length === 0 && resultResults.length === 0 && admitCardResults.length === 0) {
+                resultsHtml += '<p class="text-center text-gray-600">No results found.</p>';
+            } else {
+                resultsHtml += '<div class="search-results-container space-y-12">';
+                if (jobResults.length > 0) {
+                    resultsHtml += '<div><h3>Matching Jobs</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
+                    jobResults.forEach(item => resultsHtml += createJobCard(item));
+                    resultsHtml += '</div></div>';
+                }
+                if (resultResults.length > 0) {
+                    resultsHtml += '<div><h3>Matching Results</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
+                    resultResults.forEach(item => resultsHtml += createResultCard(item));
+                    resultsHtml += '</div></div>';
+                }
+                if (admitCardResults.length > 0) {
+                    resultsHtml += '<div><h3>Matching Admit Cards</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
+                    admitCardResults.forEach(item => resultsHtml += createAdmitCardCard(item));
+                    resultsHtml += '</div></div>';
+                }
+                resultsHtml += '</div>';
+            }
+            searchResultsView.innerHTML = resultsHtml;
+        }
+
+        function clearSearch() {
+            searchInput.value = '';
+            searchResultsView.classList.add('hidden');
+            mainContentView.classList.remove('hidden');
+            searchResultsView.innerHTML = '';
+        }
+
+        async function callGeminiAPI(prompt) {
+            const apiKey = "";
+            const model = 'gemini-2.0-flash';
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+                const result = await response.json();
+                return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
+            } catch (error) {
+                console.error("Gemini API error:", error);
+                return "Could not load details from AI. Please try again later.";
+            }
+        }
+
+        function showModal(title, bodyContent, footerContent = '') {
+            aiModalTitle.innerHTML = sanitizeText(title);
+            modalBody.innerHTML = bodyContent;
+            modalFooter.innerHTML = footerContent;
+            aiModal.classList.remove('hidden');
+        }
+
+        function formatForDisplay(text) {
+            if (!text) return "";
+            let html = sanitizeText(text)
+                .replace(/## (.*)/g, '<h3>$1</h3>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/(?:^\* .*(?:\n|$))+/gm, (listBlock) => {
+                const listItems = listBlock.trim().split('\n').map(item => `<li>${item.replace(/^\* /, '').trim()}</li>`).join('');
+                return `<ul>${listItems}</ul>`;
+            });
+            return html.replace(/\n/g, '<br>');
+        }
+
+        async function handleDetailsClick(jobId) {
+            const job = allData.jobs.find(j => j.id === jobId);
+            if (!job) return;
+            const footerLinks = `<div class="flex flex-col sm:flex-row justify-center gap-4"><a href="${job.applicationUrl}" target="_blank" rel="noopener noreferrer" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 text-center">Apply Online</a><a href="${job.notificationPdfUrl}" target="_blank" rel="noopener noreferrer" class="bg-gray-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-gray-800 text-center">Download Notification</a></div>`;
+
+            if (job.detailedSummary) {
+                showModal(`Details for ${job.title}`, formatForDisplay(job.detailedSummary), footerLinks);
+                return;
+            }
+            showModal(`Details for ${job.title}`, `<div class="flex items-center justify-center p-8"><div class="btn-spinner" style="width: 40px; height: 40px;"></div><p class="ml-4">Loading details with AI...</p></div>`, '');
+            const prompt = `You are an expert at parsing Indian government job notifications. From the text below, extract and structure the information into clean Markdown. Focus on eligibility, important dates, application fees, and vacancy details. Text: --- ${job.notificationText} ---`;
+            const details = await callGeminiAPI(prompt);
+            try {
+                const jobRef = doc(db, `artifacts/${appId}/public/data/jobs`, job.id);
+                await updateDoc(jobRef, { detailedSummary: details });
+                job.detailedSummary = details;
+            } catch (error) {
+                console.error("Error caching details:", error);
+            }
+            showModal(`Details for ${job.title}`, formatForDisplay(details), footerLinks);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+             setupApp();
+             document.body.addEventListener('click', (e) => {
+                const paginationButton = e.target.closest('.pagination-btn');
+                if(paginationButton) {
+                    const type = paginationButton.dataset.type;
+                    currentPage[type] = parseInt(paginationButton.dataset.page);
+                    renderContent(type);
+                }
+                const detailsButton = e.target.closest('.details-btn');
+                if(detailsButton) {
+                    handleDetailsClick(detailsButton.dataset.jobid);
+                }
+                if (e.target.id === 'clear-search-btn') {
+                    clearSearch();
+                }
+            });
+            searchInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') { performSearch(); } });
+            searchInput.addEventListener('input', () => { if (searchInput.value.trim() === '') { clearSearch(); } });
+            tabNav.addEventListener('click', (e) => {
+                const button = e.target.closest('button.tab-btn');
+                if (!button) return;
+                const tab = button.dataset.tab;
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.classList.add('text-gray-500', 'hover:text-indigo-600');
+                });
+                button.classList.add('active');
+                button.classList.remove('text-gray-500', 'hover:text-indigo-600');
+                document.querySelectorAll('.tab-content').forEach(content => { content.classList.add('hidden'); });
+                document.getElementById(`${tab}-content`).classList.remove('hidden');
+                renderContent(tab);
+            });
+            closeModalBtn.addEventListener('click', () => aiModal.classList.add('hidden'));
+            aiModal.addEventListener('click', (e) => { if (e.target === aiModal) aiModal.classList.add('hidden'); });
+        });
+    </script>
     <style>
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Poppins', sans-serif;
             background-color: #f3f4f6;
         }
         .content-card {
             transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
             border: 1px solid #e5e7eb;
+            min-height: 250px; 
         }
         .content-card:hover {
             transform: translateY(-5px);
@@ -38,23 +367,23 @@
         #modalBody h3, .search-results-container h3 { font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-top: 1.25rem; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e5e7eb; }
         #modalBody ul { list-style-type: none; padding-left: 0; margin-top: 0.5rem; }
         #modalBody li { position: relative; padding-left: 1.5rem; margin-bottom: 0.5rem; }
-        #modalBody li::before { content: '✓'; position: absolute; left: 0; color: #4f46e5; font-weight: 700; }
+        #modalBody li::before { content: '✓'; position: absolute; left: 0; color: #000080; font-weight: 700; }
         #modalBody strong { color: #374151; }
         .tab-btn {
             transition: all 0.2s ease-in-out;
         }
         .tab-btn.active {
-            border-color: #4f46e5;
-            color: #4f46e5;
+            border-color: #000080;
+            color: #000080;
             background-color: #eef2ff;
         }
         .pagination-btn {
             transition: all 0.2s ease-in-out;
         }
         .pagination-btn.active {
-            background-color: #4f46e5;
+            background-color: #000080;
             color: white;
-            border-color: #4f46e5;
+            border-color: #000080;
         }
     </style>
 </head>
@@ -62,9 +391,14 @@
 
     <header class="bg-white shadow-md sticky top-0 z-20">
         <nav class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center gap-4">
-            <div class="flex items-center space-x-2 flex-shrink-0">
-                <i class="fas fa-briefcase text-2xl text-indigo-600"></i>
-                <h1 class="text-xl md:text-2xl font-bold text-gray-900">Sarkari Naukri Finder</h1>
+            <div class="flex items-center space-x-3 flex-shrink-0">
+                <!-- NEW: Integrated the new logo SVG -->
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='grad_blue' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23000080;stop-opacity:1' /%3E%3Cstop offset='100%25' style='stop-color:%234169E1;stop-opacity:1' /%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M75,20 H25 C22.24,20 20,22.24 20,25 V75 C20,77.76 22.24,80 25,80 H75 C77.76,80 80,77.76 80,75 V25 C80,22.24 77.76,20 75,20 Z' fill='%23FFFFFF' stroke='%23e5e7eb' stroke-width='2'/%3E%3Crect x='20' y='20' width='60' height='12' fill='%23FF9933'/%3E%3Crect x='20' y='32' width='60' height='12' fill='%23FFFFFF'/%3E%3Crect x='20' y='44' width='60' height='12' fill='%23138808'/%3E%3Ccircle cx='50' cy='38' r='4' fill='%23000080'/%3E%3Cg transform='translate(50,38)'%3E%3Cpath d='M0 -3.5 L0 3.5 M-1.75 -3.03 L1.75 3.03 M-3.03 -1.75 L3.03 1.75 M-3.5 0 L3.5 0 M-3.03 1.75 L3.03 -1.75 M-1.75 3.03 L1.75 -3.03' stroke='%23000080' stroke-width='0.5'/%3E%3C/g%3E%3Ccircle cx='65' cy='65' r='18' fill='url(%23grad_blue)'/%3E%3Cpath d='M65,53 a12,12 0 1,0 0,24 a12,12 0 1,0 0,-24 M65,58 a7,7 0 1,1 0,14 a7,7 0 1,1 0,-14' fill='white'/%3E%3Cline x1='74' y1='74' x2='82' y2='82' stroke='url(%23grad_blue)' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E" class="h-12 w-12" alt="Sarkari Naukri Finder Logo">
+                <!-- NEW: Integrated the new text logo -->
+                <div>
+                    <div class="text-2xl font-bold" style="color: #000080;">Sarkari Naukri</div>
+                    <div class="text-md tracking-wider font-semibold" style="color: #FF9933;">Finder</div>
+                </div>
             </div>
             <!-- Search Bar -->
             <div class="relative w-full max-w-lg">
@@ -137,386 +471,5 @@
             <div id="modalFooter" class="p-4 bg-gray-50 border-t"></div>
         </div>
     </div>
-
-    <script type="module">
-        // Firebase Imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, updateDoc, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // DOM Elements
-        const aiModal = document.getElementById('aiModal');
-        const closeModalBtn = document.getElementById('closeModalBtn');
-        const modalBody = document.getElementById('modalBody');
-        const modalFooter = document.getElementById('modalFooter');
-        const aiModalTitle = document.getElementById('aiModalTitle');
-        const tabNav = document.getElementById('tab-nav');
-        const searchInput = document.getElementById('searchInput');
-        const mainContentView = document.getElementById('main-content-view');
-        const searchResultsView = document.getElementById('search-results-view');
-
-
-        // App State
-        let db;
-        let allData = { jobs: [], results: [], admitCards: [] };
-        let currentPage = { jobs: 1, results: 1, admitCards: 1 };
-        const itemsPerPage = 16;
-        let appId = 'my-job-porta'; // Default, will be replaced by config
-
-        /**
-         * Initializes the Firebase app and sets up authentication.
-         */
-        async function setupApp() {
-            try {
-                // IMPORTANT: Replace with your actual Firebase configuration
-                const firebaseConfig = {
-                    apiKey: "AIzaSyBmJN7DL7d8G1ByqPKdzIBpNZxSp4-0VrI",
-                    authDomain: "my-job-porta.firebaseapp.com",
-                    projectId: "my-job-porta",
-                    storageBucket: "my-job-porta.appspot.com",
-                    messagingSenderId: "246539623451",
-                    appId: "1:246539623451:web:483fd691916b7ba6a7ecbe",
-                    measurementId: "G-9S4CR1KR5Q"
-                };
-                appId = firebaseConfig.projectId;
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                const auth = getAuth(app);
-                
-                await signInAnonymously(auth);
-                onAuthStateChanged(auth, user => {
-                    if (user) {
-                        console.log("Firebase connected. User authenticated.");
-                        setupRealtimeListeners();
-                    }
-                });
-            } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                document.body.innerHTML = '<div class="text-center p-8 text-red-600">Could not connect to the database. Please check the console for errors.</div>';
-            }
-        }
-        
-        /**
-         * Sets up real-time listeners for all content types.
-         */
-        function setupRealtimeListeners() {
-            const types = ['jobs', 'results', 'admitCards'];
-            types.forEach(type => {
-                const q = query(collection(db, `artifacts/${appId}/public/data/${type}`), orderBy("postedDate", "desc"));
-                
-                onSnapshot(q, (querySnapshot) => {
-                    console.log(`Received update for ${type}`);
-                    allData[type] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
-                    if (activeTab === type) {
-                         renderContent(type);
-                    }
-                }, (error) => {
-                    console.error(`Error fetching real-time ${type}:`, error);
-                });
-            });
-            renderContent('jobs');
-        }
-
-
-        /**
-         * Renders content for a specific tab (jobs, results, etc.).
-         * @param {string} type - The content type to render ('jobs', 'results', 'admitCards').
-         */
-        function renderContent(type) {
-            const container = document.getElementById(`${type}-container`);
-            const paginationContainer = document.getElementById(`${type}-pagination-container`);
-            if (!container || !paginationContainer) return;
-
-            let dataToRender = allData[type];
-            
-            if (type === 'jobs') {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0); 
-                dataToRender = allData.jobs.filter(job => {
-                    if (!job.postedDate || !job.lastDate) return false;
-                    const lastDate = new Date(job.lastDate);
-                    lastDate.setHours(0,0,0,0);
-                    return lastDate >= today;
-                });
-            }
-            
-            const totalPages = Math.ceil(dataToRender.length / itemsPerPage);
-            const startIndex = (currentPage[type] - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const paginatedItems = dataToRender.slice(startIndex, endIndex);
-
-            let contentHtml = '';
-            paginatedItems.forEach(item => {
-                if (type === 'jobs') contentHtml += createJobCard(item);
-                else if (type === 'results') contentHtml += createResultCard(item);
-                else if (type === 'admitCards') contentHtml += createAdmitCardCard(item);
-            });
-            container.innerHTML = contentHtml || `<p class="text-gray-500 p-4 col-span-full">No new ${type} found.</p>`;
-
-            renderPagination(type, totalPages);
-        }
-        
-        /**
-         * Renders the pagination buttons for a content type.
-         */
-        function renderPagination(type, totalPages) {
-            const paginationContainer = document.getElementById(`${type}-pagination-container`);
-            if (!paginationContainer) return;
-            if (totalPages <= 1) {
-                paginationContainer.innerHTML = '';
-                return;
-            }
-
-            let paginationHtml = '<nav class="flex items-center justify-center gap-2">';
-            
-            if (currentPage[type] > 1) {
-                paginationHtml += `<button data-page="${currentPage[type] - 1}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md">&laquo;</button>`;
-            }
-
-            for (let i = 1; i <= totalPages; i++) {
-                paginationHtml += `<button data-page="${i}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md ${i === currentPage[type] ? 'active' : ''}">${i}</button>`;
-            }
-
-            if (currentPage[type] < totalPages) {
-                paginationHtml += `<button data-page="${currentPage[type] + 1}" data-type="${type}" class="pagination-btn px-3 py-1 border rounded-md">&raquo;</button>`;
-            }
-
-            paginationHtml += '</nav>';
-            paginationContainer.innerHTML = paginationHtml;
-        }
-
-        /**
-         * Sanitizes text to prevent basic HTML injection issues.
-         */
-        function sanitizeText(text) {
-            if (!text) return '';
-            const element = document.createElement('div');
-            element.innerText = text;
-            return element.innerHTML;
-        }
-
-        // --- Card Creation Functions ---
-
-        function createJobCard(job) {
-            const lastDate = new Date(job.lastDate);
-            const formattedDate = lastDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-            return `
-                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
-                    <h4 class="text-base font-bold text-gray-900">${sanitizeText(job.title)}</h4>
-                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(job.organization)}</p>
-                    <p class="text-xs text-gray-600 mb-4 flex-grow">${sanitizeText(job.description || '')}</p>
-                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Last Date:</strong> ${formattedDate}</div>
-                    <div class="mt-auto pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2">
-                        <button data-jobid="${job.id}" class="details-btn flex-1 bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors text-sm">View Details</button>
-                    </div>
-                </div>`;
-        }
-
-        function createResultCard(item) {
-            const date = new Date(item.postedDate);
-            const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-            return `
-                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
-                    <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
-                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
-                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Result Date:</strong> ${formattedDate}</div>
-                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-green-500 text-white font-semibold py-2 rounded-lg hover:bg-green-600 transition-colors text-sm mt-auto">Download Result</a>
-                </div>`;
-        }
-
-        function createAdmitCardCard(item) {
-            const date = new Date(item.lastDate); // Using lastDate for Exam Date
-            const formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-            return `
-                <div class="content-card bg-white p-6 rounded-lg flex flex-col h-full">
-                    <h4 class="text-base font-bold text-gray-900 flex-grow">${sanitizeText(item.title)}</h4>
-                    <p class="text-sm text-gray-500 mt-1 mb-3">${sanitizeText(item.organization)}</p>
-                    <div class="text-sm font-semibold text-gray-700 mb-4"><strong>Exam Date:</strong> ${formattedDate}</div>
-                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-red-500 text-white font-semibold py-2 rounded-lg hover:bg-red-600 transition-colors text-sm mt-auto">Download Admit Card</a>
-                </div>`;
-        }
-        
-        // --- Search Logic ---
-
-        function performSearch() {
-            const query = searchInput.value.trim().toLowerCase();
-
-            if (!query) {
-                clearSearch();
-                return;
-            }
-
-            mainContentView.classList.add('hidden');
-            searchResultsView.classList.remove('hidden');
-
-            const jobResults = allData.jobs.filter(item => 
-                (item.title && item.title.toLowerCase().includes(query)) || 
-                (item.organization && item.organization.toLowerCase().includes(query))
-            );
-            const resultResults = allData.results.filter(item => 
-                (item.title && item.title.toLowerCase().includes(query)) || 
-                (item.organization && item.organization.toLowerCase().includes(query))
-            );
-            const admitCardResults = allData.admitCards.filter(item => 
-                (item.title && item.title.toLowerCase().includes(query)) || 
-                (item.organization && item.organization.toLowerCase().includes(query))
-            );
-
-            let resultsHtml = `
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-2xl md:text-3xl font-bold">Search Results for "${sanitizeText(query)}"</h2>
-                    <button id="clear-search-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Clear Search</button>
-                </div>
-            `;
-
-            if (jobResults.length === 0 && resultResults.length === 0 && admitCardResults.length === 0) {
-                resultsHtml += '<p class="text-center text-gray-600">No results found.</p>';
-            } else {
-                resultsHtml += '<div class="search-results-container space-y-12">';
-                if (jobResults.length > 0) {
-                    resultsHtml += '<div><h3>Matching Jobs</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
-                    jobResults.forEach(item => resultsHtml += createJobCard(item));
-                    resultsHtml += '</div></div>';
-                }
-                if (resultResults.length > 0) {
-                    resultsHtml += '<div><h3>Matching Results</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
-                    resultResults.forEach(item => resultsHtml += createResultCard(item));
-                    resultsHtml += '</div></div>';
-                }
-                if (admitCardResults.length > 0) {
-                    resultsHtml += '<div><h3>Matching Admit Cards</h3><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mt-4">';
-                    admitCardResults.forEach(item => resultsHtml += createAdmitCardCard(item));
-                    resultsHtml += '</div></div>';
-                }
-                resultsHtml += '</div>';
-            }
-            
-            searchResultsView.innerHTML = resultsHtml;
-        }
-
-        function clearSearch() {
-            searchInput.value = '';
-            searchResultsView.classList.add('hidden');
-            mainContentView.classList.remove('hidden');
-            searchResultsView.innerHTML = '';
-        }
-
-        // --- Modal and AI Logic ---
-
-        async function callGeminiAPI(prompt) {
-            const apiKey = ""; // API key is handled by the environment, leave empty.
-            const model = 'gemini-2.0-flash';
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-            try {
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-                const result = await response.json();
-                return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
-            } catch (error) {
-                console.error("Gemini API error:", error);
-                return "Could not load details from AI. Please try again later.";
-            }
-        }
-
-        function showModal(title, bodyContent, footerContent = '') {
-            aiModalTitle.innerHTML = sanitizeText(title);
-            modalBody.innerHTML = bodyContent;
-            modalFooter.innerHTML = footerContent;
-            aiModal.classList.remove('hidden');
-        }
-
-        function formatForDisplay(text) {
-            if (!text) return "";
-            let html = sanitizeText(text)
-                .replace(/## (.*)/g, '<h3>$1</h3>')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            html = html.replace(/(?:^\* .*(?:\n|$))+/gm, (listBlock) => {
-                const listItems = listBlock.trim().split('\n').map(item => `<li>${item.replace(/^\* /, '').trim()}</li>`).join('');
-                return `<ul>${listItems}</ul>`;
-            });
-            return html.replace(/\n/g, '<br>');
-        }
-
-        async function handleDetailsClick(jobId) {
-            const job = allData.jobs.find(j => j.id === jobId);
-            if (!job) return;
-            const footerLinks = `<div class="flex flex-col sm:flex-row justify-center gap-4">
-                    <a href="${job.applicationUrl}" target="_blank" rel="noopener noreferrer" class="bg-green-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-700 text-center">Apply Online</a>
-                    <a href="${job.notificationPdfUrl}" target="_blank" rel="noopener noreferrer" class="bg-gray-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-gray-800 text-center">Download Notification</a>
-                </div>`;
-
-            if (job.detailedSummary) {
-                showModal(`Details for ${job.title}`, formatForDisplay(job.detailedSummary), footerLinks);
-                return;
-            }
-            showModal(`Details for ${job.title}`, `<div class="flex items-center justify-center p-8"><div class="btn-spinner" style="width: 40px; height: 40px;"></div><p class="ml-4">Loading details with AI...</p></div>`, '');
-            const prompt = `You are an expert at parsing Indian government job notifications. From the text below, extract and structure the information into clean Markdown. Focus on eligibility, important dates, application fees, and vacancy details. Text: --- ${job.notificationText} ---`;
-            const details = await callGeminiAPI(prompt);
-            try {
-                const jobRef = doc(db, `artifacts/${appId}/public/data/jobs`, job.id);
-                await updateDoc(jobRef, { detailedSummary: details });
-                job.detailedSummary = details; // Cache in local state
-            } catch (error) {
-                console.error("Error caching details:", error);
-            }
-            showModal(`Details for ${job.title}`, formatForDisplay(details), footerLinks);
-        }
-
-        // --- Event Listeners ---
-        document.body.addEventListener('click', (e) => {
-            const paginationButton = e.target.closest('.pagination-btn');
-            if(paginationButton) {
-                const type = paginationButton.dataset.type;
-                currentPage[type] = parseInt(paginationButton.dataset.page);
-                renderContent(type);
-            }
-             const detailsButton = e.target.closest('.details-btn');
-            if(detailsButton) {
-                handleDetailsClick(detailsButton.dataset.jobid);
-            }
-            if (e.target.id === 'clear-search-btn') {
-                clearSearch();
-            }
-        });
-        
-        searchInput.addEventListener('keyup', (e) => {
-            if (e.key === 'Enter') {
-                performSearch();
-            }
-        });
-
-        // Also search when user clears the input
-        searchInput.addEventListener('input', () => {
-            if (searchInput.value.trim() === '') {
-                clearSearch();
-            }
-        });
-        
-        tabNav.addEventListener('click', (e) => {
-            const button = e.target.closest('button.tab-btn');
-            if (!button) return;
-            const tab = button.dataset.tab;
-            
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
-                btn.classList.add('text-gray-500', 'hover:text-indigo-600');
-            });
-            button.classList.add('active');
-            button.classList.remove('text-gray-500', 'hover:text-indigo-600');
-
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.add('hidden');
-            });
-            document.getElementById(`${tab}-content`).classList.remove('hidden');
-            renderContent(tab);
-        });
-
-        closeModalBtn.addEventListener('click', () => aiModal.classList.add('hidden'));
-        aiModal.addEventListener('click', (e) => { if (e.target === aiModal) aiModal.classList.add('hidden'); });
-        
-        window.addEventListener('load', setupApp);
-    </script>
 </body>
 </html>
