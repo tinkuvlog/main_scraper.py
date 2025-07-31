@@ -85,27 +85,21 @@ def call_gemini_api(prompt):
 def get_base_title(title):
     """
     Creates the ultimate, highly restrictive, unique identifier for a post.
-    It aggressively cleans the title and sorts the remaining keywords alphabetically.
     """
     title = title.lower()
-    # Expanded list of noise words to remove
     noise_words = [
         'recruitment', 'online', 'form', 'apply', 'vacancy', 'posts?', 'admit card', 
         'result', 'answer key', 'marks', 'phase', 'advt', 'no', 'for', 'various', 
         'post', 'of', 'and', 'in', 'new', 'latest', 'direct'
     ]
-    # Create a regex pattern from the noise words
     noise_pattern = r'\b(' + '|'.join(noise_words) + r')\b'
     
-    # Remove noise words, all numbers, years, and special characters
     title = re.sub(noise_pattern, '', title)
-    title = re.sub(r'\[|\]|\(|\)|\d+', '', title) # Removes brackets and all numbers
-    title = re.sub(r'[^a-z\s]', '', title) # Removes any remaining non-alphabetic characters
+    title = re.sub(r'\[|\]|\(|\)|\d+', '', title)
+    title = re.sub(r'[^a-z\s]', '', title)
     
-    # Split into words, sort them alphabetically, and join back
     words = sorted(list(set(filter(None, title.split()))))
     
-    # Return the canonical identifier
     return ' '.join(words)
 
 
@@ -126,7 +120,8 @@ def find_main_content(soup):
 
 def scrape_section(db, app_id, section_id, collection_name):
     """
-    Scrapes a specific section using the ultimate duplicate filter.
+    Scrapes a section with an efficient "early exit" duplicate check.
+    It stops processing as soon as it finds the first existing item.
     """
     URL = f"https://www.sarkariresult.com.im/{section_id}/"
     print("-" * 50)
@@ -162,31 +157,35 @@ def scrape_section(db, app_id, section_id, collection_name):
             print(f"Could not find any new potential links in section '{section_id}'.")
             return
 
-        print(f"Found {len(item_links)} potential new items. Checking against database...")
+        print(f"Found {len(item_links)} potential items. Checking top items for updates...")
 
         processed_count = 0
+        new_items_found = False
         for title, url in item_links:
+            # Only process a maximum of 5 new items per run to be safe
             if processed_count >= 5:
-                print("Processed 5 new items. Stopping to conserve API quota for this section.")
+                print("Processed 5 new items. Stopping to conserve API quota.")
                 break
 
             if not title or not url: continue
 
-            # --- ULTIMATE DUPLICATE CHECK ---
             base_title = get_base_title(title)
-            if not base_title: 
-                continue
+            if not base_title: continue
 
             items_ref = db.collection(f"artifacts/{app_id}/public/data/{collection_name}")
-            # UPDATED: Changed the time window for duplicate checks to 30 days (1 month).
             cutoff_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
             
-            # Simplified, more powerful query. This is the only check needed now.
+            # Check if this item already exists in the last 30 days
             existing_item_query = items_ref.where("baseTitle", "==", base_title).where("postedDate", ">=", cutoff_date).limit(1).get()
             
+            # --- NEW "EARLY EXIT" LOGIC ---
             if len(existing_item_query) > 0:
-                continue
-
+                # If we find an existing item, we assume everything below it is also old.
+                print(f"Found existing item: '{title}'. Assuming no newer posts. Stopping.")
+                break # Exit the loop immediately.
+            
+            # If we've reached here, the item is new.
+            new_items_found = True
             print(f"Processing new {collection_name[:-1]}: {title}")
             
             try:
@@ -234,6 +233,9 @@ def scrape_section(db, app_id, section_id, collection_name):
             
             print("Waiting for 5 seconds before next item...")
             time.sleep(5)
+        
+        if not new_items_found:
+            print("No new items found in this section.")
 
     except Exception as e:
         print(f"An unrecoverable error occurred while scraping section {section_id}: {e}")
